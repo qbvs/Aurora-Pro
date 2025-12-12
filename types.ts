@@ -20,6 +20,17 @@ export interface SearchEngine {
   searchUrlPattern: string; // e.g., https://www.google.com/search?q=
 }
 
+export interface AIProviderConfig {
+  id: string;
+  name: string;
+  type: 'google' | 'openai'; // 'google' uses official SDK, 'openai' uses REST API (Longcat, etc.)
+  baseUrl: string; // e.g., https://api.longcat.chat/openai
+  apiKey: string; // The manual input key (for testing or direct use)
+  envSlot?: string; // e.g., 'CUSTOM_API_KEY_1' - if set, prefer this over apiKey
+  model: string; // e.g., gemini-2.5-flash or longcat-flash
+  isActive: boolean;
+}
+
 export interface AppSettings {
   // Identity
   appName: string;
@@ -30,6 +41,9 @@ export interface AppSettings {
   openInNewTab: boolean;
   activeSearchEngineId: string;
   
+  // AI Settings
+  aiConfigs: AIProviderConfig[];
+
   // Appearance
   cardOpacity: number;
   backgroundMode: 'aurora' | 'monotone' | 'custom';

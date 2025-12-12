@@ -1,4 +1,4 @@
-import { Category, AppSettings, SearchEngine } from './types';
+import { Category, AppSettings, SearchEngine, AIProviderConfig } from './types';
 
 export const INITIAL_SEARCH_ENGINES: SearchEngine[] = [
   {
@@ -21,12 +21,34 @@ export const INITIAL_SEARCH_ENGINES: SearchEngine[] = [
   }
 ];
 
+const DEFAULT_AI_CONFIGS: AIProviderConfig[] = [
+  {
+    id: 'ai-google-env',
+    name: 'Google Gemini (Env)',
+    type: 'google',
+    baseUrl: '', // Not used for SDK
+    apiKey: '', // Will use process.env.API_KEY if empty
+    model: 'gemini-2.5-flash',
+    isActive: true
+  },
+  {
+    id: 'ai-longcat',
+    name: '美团龙猫 (Longcat)',
+    type: 'openai',
+    baseUrl: 'https://api.longcat.chat/openai',
+    apiKey: '', // User needs to fill this
+    model: 'longcat-flash',
+    isActive: false
+  }
+];
+
 export const INITIAL_SETTINGS: AppSettings = {
   appName: 'Aurora Pro',
   appIcon: 'Zap',
   theme: 'system',
   openInNewTab: true,
   activeSearchEngineId: 'se-google',
+  aiConfigs: DEFAULT_AI_CONFIGS,
   cardOpacity: 80,
   backgroundMode: 'aurora',
   enableAiGreeting: true,

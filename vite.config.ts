@@ -9,11 +9,18 @@ export default defineConfig(({ mode }) => {
     plugins: [react()],
     define: {
       // Explicitly define process.env variables with JSON.stringify
-      // This ensures they are embedded as strings ("value") rather than variable references (value)
+      // Core Variables
       'process.env.API_KEY': JSON.stringify(env.API_KEY || ''),
       'process.env.ADMIN_PASSWORD': JSON.stringify(env.ADMIN_PASSWORD || ''),
       'process.env.KV_REST_API_URL': JSON.stringify(env.KV_REST_API_URL || ''),
-      'process.env.KV_REST_API_TOKEN': JSON.stringify(env.KV_REST_API_TOKEN || '')
+      'process.env.KV_REST_API_TOKEN': JSON.stringify(env.KV_REST_API_TOKEN || ''),
+      
+      // Reserved Slots for Custom Providers (Allows mapping in UI without rebuilding code for every new key)
+      'process.env.CUSTOM_API_KEY_1': JSON.stringify(env.CUSTOM_API_KEY_1 || ''),
+      'process.env.CUSTOM_API_KEY_2': JSON.stringify(env.CUSTOM_API_KEY_2 || ''),
+      'process.env.CUSTOM_API_KEY_3': JSON.stringify(env.CUSTOM_API_KEY_3 || ''),
+      'process.env.CUSTOM_API_KEY_4': JSON.stringify(env.CUSTOM_API_KEY_4 || ''),
+      'process.env.CUSTOM_API_KEY_5': JSON.stringify(env.CUSTOM_API_KEY_5 || '')
     }
   };
 });

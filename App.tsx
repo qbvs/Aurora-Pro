@@ -3,18 +3,18 @@ import {
   Settings, Plus, Search, Moon, Sun, LayoutGrid, 
   LogOut, Edit3, Trash2, X, Wand2, Globe, AlertCircle, 
   Image as ImageIcon, Upload, Palette, Type as TypeIcon, Lock,
-  Activity, CheckCircle2, XCircle, Terminal
+  Activity, CheckCircle2, XCircle, Terminal, Bot, Zap, RefreshCw, Key, Server, AlertTriangle, ChevronDown, ChevronRight
 } from 'lucide-react';
 import { 
   Category, LinkItem, AppSettings, SearchEngine, 
-  addLog, subscribeLogs, getLogs, clearLogs, LogEntry 
+  addLog, subscribeLogs, getLogs, clearLogs, LogEntry, AIProviderConfig 
 } from './types';
 import { INITIAL_DATA, INITIAL_SETTINGS, INITIAL_SEARCH_ENGINES } from './constants';
 import { 
   loadCategories, saveCategories, loadSettings, saveSettings, 
   loadSearchEngines, saveSearchEngines, isKVConfigured
 } from './services/storageService';
-import { analyzeUrl, generateCategoryLinks, getAiGreeting, suggestIcon } from './services/geminiService';
+import { analyzeUrl, generateCategoryLinks, getAiGreeting, suggestIcon, testAiConnection, fetchAiModels } from './services/geminiService';
 import { Icon } from './components/Icon';
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
@@ -60,7 +60,7 @@ const Favicon = ({ url, size = 32, className }: { url: string, size?: number, cl
   }
 };
 
-const QUOTA_EXCEEDED_MESSAGE = 'AI 免费额度已用尽。\n\n这是 Google API 的限制，不是程序错误。请为您的 Google AI 账户启用结算以解除限制，或等待明天额度刷新。';
+const QUOTA_EXCEEDED_MESSAGE = 'AI 免费额度已用尽或 API 连接失败。\n\n请在「全局设置 -> AI 模型」中切换服务商，或检查您的 API Key 和网络连接。';
 
 // --- Main App Component ---
 
@@ -95,8 +95,15 @@ const App: React.FC = () => {
   const [isAddingEngine, setIsAddingEngine] = useState(false);
 
   // Settings Tab State
-  const [activeSettingsTab, setActiveSettingsTab] = useState<'general' | 'appearance' | 'search' | 'diagnose'>('general');
+  const [activeSettingsTab, setActiveSettingsTab] = useState<'general' | 'ai' | 'appearance' | 'search' | 'diagnose'>('general');
   const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [isLogsExpanded, setIsLogsExpanded] = useState(false);
+
+  // AI Configuration State (for editing)
+  const [editingAiConfig, setEditingAiConfig] = useState<AIProviderConfig | null>(null);
+  const [testStatus, setTestStatus] = useState<{ status: 'idle' | 'loading' | 'success' | 'fail', message?: string }>({ status: 'idle' });
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [isFetchingModels, setIsFetchingModels] = useState(false);
 
   // AI Generation State
   const [isAiLoading, setIsAiLoading] = useState(false);
@@ -116,7 +123,7 @@ const App: React.FC = () => {
     return unsub;
   }, []);
 
-  // Load Data (Async for Cloud Sync)
+  // Load Data
   useEffect(() => {
     const initData = async () => {
       addLog('info', "App Initializing...");
@@ -129,7 +136,12 @@ const App: React.FC = () => {
       ]);
 
       if (savedCats) setCategories(savedCats);
-      if (savedSets) setLocalSettings(savedSets);
+      if (savedSets) {
+          if (!savedSets.aiConfigs || savedSets.aiConfigs.length === 0) {
+              savedSets.aiConfigs = INITIAL_SETTINGS.aiConfigs;
+          }
+          setLocalSettings(savedSets);
+      }
       if (savedEngines) setSearchEngines(savedEngines);
       
       setIsLoadingData(false);
@@ -138,7 +150,7 @@ const App: React.FC = () => {
 
     initData();
 
-    // Initial greeting time
+    // Greeting time
     const updateTime = () => {
       const hours = new Date().getHours();
       if (hours < 12) setCurrentTime('早上好');
@@ -148,7 +160,7 @@ const App: React.FC = () => {
     updateTime();
   }, []);
 
-  // Clock Timer
+  // Clock
   useEffect(() => {
     const timer = setInterval(() => setClock(new Date()), 1000);
     return () => clearInterval(timer);
@@ -158,9 +170,7 @@ const App: React.FC = () => {
   useEffect(() => {
     const fetchGreeting = async () => {
         if (!settings.enableAiGreeting) return;
-        
-        // Cache greeting for 4 hours
-        const CACHE_KEY = 'aurora_greeting_cache';
+        const CACHE_KEY = 'aurora_greeting_cache_v2';
         const cached = localStorage.getItem(CACHE_KEY);
         if (cached) {
             const { text, expiry } = JSON.parse(cached);
@@ -169,7 +179,6 @@ const App: React.FC = () => {
                 return;
             }
         }
-
         const text = await getAiGreeting();
         if (text) {
             setAiGreeting(text);
@@ -180,9 +189,9 @@ const App: React.FC = () => {
         }
     };
     fetchGreeting();
-  }, [settings.enableAiGreeting]);
+  }, [settings.enableAiGreeting, settings.aiConfigs]);
 
-  // Dark Mode Application
+  // Dark Mode
   useEffect(() => {
     const root = window.document.documentElement;
     if (settings.theme === 'dark' || (settings.theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
@@ -210,15 +219,12 @@ const App: React.FC = () => {
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     const validPassword = process.env.ADMIN_PASSWORD;
-    
-    // If no password set in env, allow access (dev mode)
     if (!validPassword) {
        setIsAuthenticated(true);
        setShowLoginModal(false);
        toggleEditMode();
        return;
     }
-
     if (passwordInput === validPassword) {
       setIsAuthenticated(true);
       setShowLoginModal(false);
@@ -232,31 +238,100 @@ const App: React.FC = () => {
 
   const toggleEditMode = () => setIsEditMode(!isEditMode);
 
-  // Category Management
+  const handleAiConfigChange = (id: string, updates: Partial<AIProviderConfig>) => {
+      const newConfigs = settings.aiConfigs.map(c => 
+          c.id === id ? { ...c, ...updates } : c
+      );
+      if (updates.isActive) {
+          newConfigs.forEach(c => {
+              if (c.id !== id) c.isActive = false;
+          });
+      }
+      setLocalSettings({ ...settings, aiConfigs: newConfigs });
+  };
+
+  const handleAddAiProvider = () => {
+    const newConfig: AIProviderConfig = {
+        id: `ai-custom-${Date.now()}`,
+        name: '自定义 OpenAI 服务',
+        type: 'openai',
+        baseUrl: 'https://api.openai.com',
+        apiKey: '',
+        model: 'gpt-3.5-turbo',
+        isActive: false
+    };
+    setLocalSettings(prev => ({ ...prev, aiConfigs: [...prev.aiConfigs, newConfig] }));
+    setEditingAiConfig(newConfig);
+  };
+
+  const handleDeleteAiProvider = (id: string) => {
+    setConfirmModal({
+        isOpen: true,
+        message: '确定要删除这个 AI 服务配置吗？',
+        onConfirm: () => {
+            setLocalSettings(prev => ({
+                ...prev,
+                aiConfigs: prev.aiConfigs.filter(c => c.id !== id)
+            }));
+            if (editingAiConfig?.id === id) setEditingAiConfig(null);
+            setConfirmModal(null);
+        }
+    });
+  };
+
+  const handleFetchModels = async (config: AIProviderConfig) => {
+      setIsFetchingModels(true);
+      const models = await fetchAiModels(config);
+      if (models.length > 0) {
+          setAvailableModels(models);
+          // Auto fill first if default
+          if (!config.model || config.model === 'gpt-3.5-turbo') {
+              handleAiConfigChange(config.id, { model: models[0] });
+          }
+      } else {
+          // Explicit feedback for user when manual refresh fails
+          alert('无法自动获取模型列表 (可能是服务商未开放列表接口)。\n\n请直接在输入框中手动填写模型名称 (例如: deepseek-chat, longcat-flash 等)。');
+      }
+      setIsFetchingModels(false);
+  };
+
+  const handleTestConnection = async (config: AIProviderConfig) => {
+      setTestStatus({ status: 'loading' });
+      const result = await testAiConnection(config);
+      setTestStatus({ 
+          status: result.success ? 'success' : 'fail',
+          message: result.message
+      });
+      
+      if (result.success) {
+          // Try fetching models silently to populate list
+          const models = await fetchAiModels(config);
+          if (models.length > 0) setAvailableModels(models);
+      }
+      setTimeout(() => setTestStatus({ status: 'idle' }), 5000);
+  };
+
   const handleCategoryNameChange = (id: string, newTitle: string) => {
     const newCats = categories.map(cat => cat.id === id ? { ...cat, title: newTitle } : cat);
     setCategories(newCats);
   };
 
   const handleCategoryNameBlur = async (id: string, title: string) => {
-    // Save locally and cloud
     saveCategories(categories);
-    
-    // AI Icon Generation (fail silently)
     try {
         const icon = await suggestIcon(title);
         const newCats = categories.map(cat => cat.id === id ? { ...cat, icon: icon } : cat);
         setCategories(newCats);
         saveCategories(newCats);
     } catch (e) {
-        console.error("Failed to generate icon", e);
+        console.error(e);
     }
   };
 
   const handleDeleteLink = (catId: string, linkId: string) => {
     setConfirmModal({
         isOpen: true,
-        message: '确定要删除这个链接吗？操作无法撤销。',
+        message: '确定要删除这个链接吗？',
         onConfirm: () => {
             const newCats = categories.map(cat => {
             if (cat.id !== catId) return cat;
@@ -307,17 +382,7 @@ const App: React.FC = () => {
         color: data.brandColor
       }));
     } catch (e) {
-      if ((e as Error).message === 'QUOTA_EXCEEDED') {
-        alert(QUOTA_EXCEEDED_MESSAGE);
-      } else {
         alert('AI 识别失败，请查看系统诊断日志');
-        setLinkForm(prev => ({
-            ...prev,
-            title: "识别失败",
-            description: "AI 暂时无法访问",
-            color: "#cccccc"
-        }));
-      }
     } finally {
       setIsAiLoading(false);
     }
@@ -328,14 +393,10 @@ const App: React.FC = () => {
     setIsGeneratingLinks(true);
     try {
       const newLinksData = await generateCategoryLinks(showGenLinksModal.title, genCount);
-      
       if (!newLinksData || newLinksData.length === 0) {
-        // This case is now handled by the QUOTA_EXCEEDED check below,
-        // but as a fallback, we keep this alert.
         alert("AI 生成未能返回结果。请转到「全局设置 -> 系统诊断」查看错误日志。");
         return;
       }
-
       const newLinks: LinkItem[] = newLinksData.map((l, i) => ({
         id: `gen-${Date.now()}-${i}`,
         title: l.title || 'Unknown',
@@ -343,21 +404,15 @@ const App: React.FC = () => {
         description: l.description || '',
         color: l.color || '#666'
       }));
-
       const newCats = categories.map(cat => {
         if (cat.id !== showGenLinksModal.catId) return cat;
         return { ...cat, links: [...cat.links, ...newLinks] };
       });
-
       setCategories(newCats);
       await saveCategories(newCats);
       setShowGenLinksModal(null);
     } catch (e) {
-      if ((e as Error).message === 'QUOTA_EXCEEDED') {
-        alert(QUOTA_EXCEEDED_MESSAGE);
-      } else {
         alert('AI 生成过程发生错误，请查看系统诊断日志');
-      }
     } finally {
       setIsGeneratingLinks(false);
     }
@@ -421,15 +476,8 @@ const App: React.FC = () => {
               name: data.title,
               searchUrlPattern: data.searchUrlPattern || ''
           }));
-          if (!data.searchUrlPattern) {
-              alert('AI 未能自动识别搜索串，请手动填写 (例如: https://.../search?q=)');
-          }
       } catch (e) {
-        if ((e as Error).message === 'QUOTA_EXCEEDED') {
-          alert(QUOTA_EXCEEDED_MESSAGE);
-        } else {
           alert('AI 识别失败，请查看系统诊断日志');
-        }
       } finally {
           setIsAiLoading(false);
       }
@@ -479,8 +527,6 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen flex text-gray-900 dark:text-gray-100 transition-colors duration-300 relative">
-      
-      {/* Background System */}
       <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
          {settings.backgroundMode === 'aurora' && (
              <>
@@ -502,7 +548,6 @@ const App: React.FC = () => {
          )}
       </div>
 
-      {/* Sidebar - Edit/Admin Mode */}
       {isEditMode && (
         <aside className="w-64 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border-r border-gray-200 dark:border-white/5 flex flex-col transition-all z-20 sticky top-0 h-screen">
           <div className="p-6">
@@ -600,11 +645,8 @@ const App: React.FC = () => {
             </div>
           </div>
 
-          {/* Hero / Greeting */}
           {!isEditMode && (
             <div className="py-8 animate-fade-in-up flex flex-col items-center relative">
-              
-              {/* Clock Section */}
               <div className="mb-6 text-center select-none">
                  <div className="text-7xl md:text-8xl font-bold tracking-tighter text-gray-800 dark:text-white tabular-nums leading-none font-[system-ui]">
                      {clock.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
@@ -621,7 +663,6 @@ const App: React.FC = () => {
                 </span>
               </h1>
               
-              {/* Search Bar Container */}
               <div className="mt-4 w-full max-w-3xl mx-auto group">
                 <form onSubmit={handleSearch} className="relative flex items-center p-2 glass-panel rounded-2xl transition-all group-focus-within:ring-2 ring-violet-500/50 shadow-lg shadow-violet-500/5">
                   <div className="flex items-center justify-center pl-3 pr-2 border-r border-gray-200 dark:border-white/10 mr-2">
@@ -661,7 +702,6 @@ const App: React.FC = () => {
                 </div>
               </div>
 
-              {/* Total Website Counter Badge */}
               <div className="mt-8 inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/50 dark:bg-slate-800/50 border border-gray-200 dark:border-white/10 text-sm text-gray-500 dark:text-gray-400 backdrop-blur-md shadow-sm transition-transform hover:scale-105 select-none">
                  <Globe size={14} className="text-violet-500" />
                  <span>已收录 <strong>{totalLinks}</strong> 个优质站点</span>
@@ -669,7 +709,6 @@ const App: React.FC = () => {
             </div>
           )}
           
-          {/* Link Categories */}
           <div className="space-y-8 pb-20">
             {categories.map((category) => (
               <div key={category.id} className={cn(isEditMode ? 'glass-panel p-6 rounded-3xl' : '', 'transition-all duration-300')}>
@@ -677,7 +716,6 @@ const App: React.FC = () => {
                   <div className="flex items-center gap-3 flex-1">
                     {isEditMode ? <Icon name={category.icon} className="text-gray-800 dark:text-white" /> : <Icon name={category.icon} className="text-yellow-500 dark:text-yellow-400" />}
                     
-                    {/* Editable Category Title */}
                     {isEditMode ? (
                         <input 
                             value={category.title}
@@ -762,7 +800,6 @@ const App: React.FC = () => {
 
       {/* --- Modals --- */}
       
-      {/* Login Modal */}
       {showLoginModal && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fade-in">
            <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-2xl w-full max-w-sm border border-white/20 relative">
@@ -800,7 +837,6 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* Confirm Modal */}
       {confirmModal && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-fade-in">
             <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-2xl w-full max-w-sm animate-scale-in">
@@ -824,7 +860,6 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* Generate Links Modal */}
       {showGenLinksModal && (
          <Modal title={`AI 生成: ${showGenLinksModal.title}`} onClose={() => setShowGenLinksModal(null)}>
             <div className="p-6 space-y-6">
@@ -873,25 +908,32 @@ const App: React.FC = () => {
          </Modal>
       )}
 
-      {/* Global Settings Modal */}
       {showSettingsModal && (
         <Modal title="全局设置" onClose={() => setShowSettingsModal(false)}>
           <div className="flex flex-col h-full">
-            {/* Tabs Header */}
-            <div className="flex items-center gap-1 p-1 bg-gray-100 dark:bg-slate-900/50 rounded-xl mb-6 mx-6 mt-2">
+            <div className="flex items-center gap-1 p-1 bg-gray-100 dark:bg-slate-900/50 rounded-xl mb-6 mx-6 mt-2 overflow-x-auto">
                 <button 
                     onClick={() => setActiveSettingsTab('general')}
                     className={cn(
-                        "flex-1 py-2 text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-2",
+                        "flex-1 py-2 px-3 text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-2 whitespace-nowrap",
                         activeSettingsTab === 'general' ? 'bg-white dark:bg-slate-800 shadow-sm text-violet-600' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
                     )}
                 >
                     <TypeIcon size={16} /> 站点
                 </button>
                 <button 
+                    onClick={() => setActiveSettingsTab('ai')}
+                    className={cn(
+                        "flex-1 py-2 px-3 text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-2 whitespace-nowrap",
+                        activeSettingsTab === 'ai' ? 'bg-white dark:bg-slate-800 shadow-sm text-violet-600' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+                    )}
+                >
+                    <Bot size={16} /> AI 模型
+                </button>
+                <button 
                     onClick={() => setActiveSettingsTab('appearance')}
                     className={cn(
-                        "flex-1 py-2 text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-2",
+                        "flex-1 py-2 px-3 text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-2 whitespace-nowrap",
                         activeSettingsTab === 'appearance' ? 'bg-white dark:bg-slate-800 shadow-sm text-violet-600' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
                     )}
                 >
@@ -900,7 +942,7 @@ const App: React.FC = () => {
                 <button 
                     onClick={() => setActiveSettingsTab('search')}
                     className={cn(
-                        "flex-1 py-2 text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-2",
+                        "flex-1 py-2 px-3 text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-2 whitespace-nowrap",
                         activeSettingsTab === 'search' ? 'bg-white dark:bg-slate-800 shadow-sm text-violet-600' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
                     )}
                 >
@@ -909,7 +951,7 @@ const App: React.FC = () => {
                 <button 
                     onClick={() => setActiveSettingsTab('diagnose')}
                     className={cn(
-                        "flex-1 py-2 text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-2",
+                        "flex-1 py-2 px-3 text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-2 whitespace-nowrap",
                         activeSettingsTab === 'diagnose' ? 'bg-white dark:bg-slate-800 shadow-sm text-red-600' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
                     )}
                 >
@@ -918,7 +960,6 @@ const App: React.FC = () => {
             </div>
 
             <div className="px-6 pb-6 space-y-6 overflow-y-auto">
-                {/* General Settings Tab (Site Name/Logo) */}
                 {activeSettingsTab === 'general' && (
                     <div className="space-y-6 animate-fade-in">
                         <section className="space-y-4">
@@ -969,11 +1010,214 @@ const App: React.FC = () => {
                     </div>
                 )}
 
-                {/* Appearance Tab */}
+                {activeSettingsTab === 'ai' && (
+                    <div className="space-y-6 animate-fade-in">
+                       <div className="space-y-3">
+                          {settings.aiConfigs.map((config, index) => (
+                             <div key={config.id} className={cn(
+                                 "rounded-xl border p-4 transition-all group",
+                                 config.isActive 
+                                    ? "bg-violet-50 dark:bg-violet-900/10 border-violet-200 dark:border-violet-700"
+                                    : "bg-white dark:bg-slate-900 border-gray-100 dark:border-white/5"
+                             )}>
+                                <div className="flex justify-between items-start mb-4">
+                                   <div className="flex items-center gap-3">
+                                      <button 
+                                        onClick={() => handleAiConfigChange(config.id, { isActive: true })}
+                                        className={cn(
+                                            "w-10 h-6 rounded-full p-1 transition-colors relative shrink-0",
+                                            config.isActive ? "bg-green-500" : "bg-gray-300 dark:bg-slate-700"
+                                        )}
+                                      >
+                                          <div className={cn("w-4 h-4 bg-white rounded-full transition-transform shadow-sm", config.isActive ? "translate-x-4" : "")} />
+                                      </button>
+                                      <div>
+                                          <div className="font-bold text-gray-800 dark:text-gray-100 flex items-center gap-2">
+                                              {config.name}
+                                              <Settings size={14} className="text-gray-400 cursor-pointer hover:text-violet-500" onClick={() => {
+                                                  if(editingAiConfig?.id === config.id) setEditingAiConfig(null);
+                                                  else setEditingAiConfig(config);
+                                              }} />
+                                          </div>
+                                          <div className="text-xs text-gray-400 font-mono mt-1 truncate max-w-[200px]">
+                                              {config.type === 'google' ? 'Google SDK' : config.baseUrl || 'No Base URL'}
+                                          </div>
+                                      </div>
+                                   </div>
+                                   {config.type === 'openai' && (
+                                       <button 
+                                         onClick={() => handleDeleteAiProvider(config.id)}
+                                         className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                                       >
+                                           <Trash2 size={16} />
+                                       </button>
+                                   )}
+                                </div>
+
+                                {(editingAiConfig?.id === config.id || config.isActive) && (
+                                    <div className="space-y-4 pt-4 border-t border-gray-200 dark:border-white/5 animate-fade-in">
+                                        {config.type === 'openai' && (
+                                            <div>
+                                                <label className="text-xs font-bold text-gray-500 uppercase mb-1.5 block">服务名称</label>
+                                                <input 
+                                                    type="text"
+                                                    value={config.name}
+                                                    onChange={(e) => handleAiConfigChange(config.id, { name: e.target.value })}
+                                                    className="w-full p-2.5 rounded-lg bg-white dark:bg-slate-950 border border-gray-200 dark:border-white/10 text-sm focus:border-violet-500 outline-none"
+                                                />
+                                            </div>
+                                        )}
+
+                                        <div>
+                                            <label className="text-xs font-bold text-gray-500 uppercase mb-1.5 flex justify-between">
+                                                <span>API 密钥来源</span>
+                                                <span className="text-[10px] font-normal text-gray-400">仅用于检测或本地保存</span>
+                                            </label>
+                                            {config.type === 'openai' && (
+                                                <div className="flex gap-2 mb-2 text-xs">
+                                                    <button 
+                                                        onClick={() => handleAiConfigChange(config.id, { envSlot: undefined })}
+                                                        className={cn("px-2 py-1 rounded border", !config.envSlot ? "bg-violet-100 text-violet-700 border-violet-200 dark:bg-violet-900/30 dark:text-violet-300" : "border-transparent text-gray-500")}
+                                                    >
+                                                        手动输入
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => handleAiConfigChange(config.id, { envSlot: 'CUSTOM_API_KEY_1' })}
+                                                        className={cn("px-2 py-1 rounded border", config.envSlot ? "bg-violet-100 text-violet-700 border-violet-200 dark:bg-violet-900/30 dark:text-violet-300" : "border-transparent text-gray-500")}
+                                                    >
+                                                        环境变量
+                                                    </button>
+                                                </div>
+                                            )}
+
+                                            <div className="flex items-center gap-2">
+                                                <div className="flex-1 relative">
+                                                    {config.envSlot ? (
+                                                        <div className="relative">
+                                                            <select
+                                                                value={config.envSlot}
+                                                                onChange={(e) => handleAiConfigChange(config.id, { envSlot: e.target.value })}
+                                                                className="w-full p-2.5 pl-9 rounded-lg bg-white dark:bg-slate-950 border border-gray-200 dark:border-white/10 text-sm font-mono outline-none focus:border-violet-500 appearance-none"
+                                                            >
+                                                                <option value="CUSTOM_API_KEY_1">CUSTOM_API_KEY_1</option>
+                                                                <option value="CUSTOM_API_KEY_2">CUSTOM_API_KEY_2</option>
+                                                                <option value="CUSTOM_API_KEY_3">CUSTOM_API_KEY_3</option>
+                                                                <option value="CUSTOM_API_KEY_4">CUSTOM_API_KEY_4</option>
+                                                                <option value="CUSTOM_API_KEY_5">CUSTOM_API_KEY_5</option>
+                                                            </select>
+                                                            <Server size={14} className="absolute left-3 top-3 text-violet-500" />
+                                                            <ChevronDown size={14} className="absolute right-3 top-3 text-gray-400 pointer-events-none" />
+                                                        </div>
+                                                    ) : (
+                                                        <div className="relative">
+                                                            <input 
+                                                                type="password"
+                                                                value={config.apiKey}
+                                                                onChange={(e) => handleAiConfigChange(config.id, { apiKey: e.target.value })}
+                                                                placeholder={config.type === 'google' && !config.apiKey ? '使用环境变量 API_KEY' : 'sk-.......'}
+                                                                className="w-full p-2.5 pl-9 rounded-lg bg-white dark:bg-slate-950 border border-gray-200 dark:border-white/10 text-sm font-mono outline-none focus:border-violet-500 transition-colors"
+                                                            />
+                                                            <Key size={14} className="absolute left-3 top-3 text-gray-400" />
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                
+                                                <button 
+                                                  onClick={() => handleTestConnection(config)}
+                                                  className={cn(
+                                                      "px-4 py-2.5 rounded-lg text-sm font-medium border transition-all flex items-center gap-2 shrink-0 relative group",
+                                                      testStatus.status === 'idle' ? "bg-white dark:bg-slate-800 border-gray-200 dark:border-white/10 text-gray-600 dark:text-gray-300 hover:bg-gray-50" :
+                                                      testStatus.status === 'loading' ? "bg-gray-100 dark:bg-slate-800 text-gray-400" :
+                                                      testStatus.status === 'success' ? "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 text-green-600" :
+                                                      "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-600"
+                                                  )}
+                                                >
+                                                    {testStatus.status === 'success' && <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />}
+                                                    {testStatus.status === 'fail' && <div className="w-2 h-2 rounded-full bg-red-500" />}
+                                                    
+                                                    {testStatus.status === 'loading' ? <RefreshCw size={14} className="animate-spin" /> : 
+                                                     testStatus.status === 'idle' ? <Zap size={14} /> : null}
+                                                    
+                                                    {testStatus.status === 'idle' ? '检测' : testStatus.status === 'loading' ? '检测中' : testStatus.status === 'success' ? '通畅' : '失败'}
+                                                </button>
+                                            </div>
+                                            {config.type === 'google' && !config.apiKey && (
+                                                <p className="text-[10px] text-gray-400 mt-1 pl-1">未填写则默认使用 Vercel 环境变量 API_KEY</p>
+                                            )}
+                                        </div>
+
+                                        {config.type === 'openai' && (
+                                            <div>
+                                                <label className="text-xs font-bold text-gray-500 uppercase mb-1.5 block">API 地址 (Base URL)</label>
+                                                <input 
+                                                    type="text"
+                                                    value={config.baseUrl}
+                                                    onChange={(e) => handleAiConfigChange(config.id, { baseUrl: e.target.value })}
+                                                    className="w-full p-2.5 rounded-lg bg-white dark:bg-slate-950 border border-gray-200 dark:border-white/10 text-sm font-mono outline-none focus:border-violet-500 transition-colors"
+                                                />
+                                                <p className="text-[10px] text-gray-400 mt-1 pl-1">例如: https://api.longcat.chat/openai (无需末尾 /v1)</p>
+                                            </div>
+                                        )}
+
+                                        <div>
+                                            <div className="flex justify-between items-center mb-1.5">
+                                                <label className="text-xs font-bold text-gray-500 uppercase block">模型</label>
+                                                <button 
+                                                   onClick={() => handleFetchModels(config)}
+                                                   disabled={isFetchingModels}
+                                                   className="text-[10px] text-violet-500 hover:text-violet-600 flex items-center gap-1"
+                                                >
+                                                    <RefreshCw size={10} className={cn(isFetchingModels ? "animate-spin" : "")} /> 刷新列表
+                                                </button>
+                                            </div>
+                                            
+                                            <div className="relative">
+                                                <input 
+                                                    list={`models-${config.id}`}
+                                                    value={config.model}
+                                                    onChange={(e) => handleAiConfigChange(config.id, { model: e.target.value })}
+                                                    className="w-full p-2.5 rounded-lg bg-white dark:bg-slate-950 border border-gray-200 dark:border-white/10 text-sm font-mono outline-none focus:border-violet-500 transition-colors"
+                                                    placeholder="输入或选择模型..."
+                                                />
+                                                <datalist id={`models-${config.id}`}>
+                                                    {availableModels.length > 0 ? (
+                                                        availableModels.map(m => <option key={m} value={m} />)
+                                                    ) : (
+                                                        <>
+                                                            <option value="gemini-2.5-flash" />
+                                                            <option value="gpt-3.5-turbo" />
+                                                            <option value="gpt-4o" />
+                                                            <option value="longcat-flash" />
+                                                            <option value="deepseek-chat" />
+                                                            <option value="claude-3-opus" />
+                                                        </>
+                                                    )}
+                                                </datalist>
+                                            </div>
+                                            {testStatus.status === 'success' && testStatus.message?.includes('模型') && (
+                                                <div className="mt-2 flex items-start gap-1.5 text-yellow-600 bg-yellow-50 dark:bg-yellow-900/10 p-2 rounded-lg border border-yellow-200 dark:border-yellow-900/30 text-[10px]">
+                                                    <AlertTriangle size={12} className="shrink-0 mt-0.5" />
+                                                    <p>注意：API 连接成功，但当前填写的模型名称可能不被支持。请尝试点击“刷新列表”或手动填写。</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                             </div>
+                          ))}
+                          <button 
+                            onClick={handleAddAiProvider}
+                            className="w-full py-3 border-2 border-dashed border-gray-200 dark:border-white/10 rounded-xl text-gray-500 hover:border-violet-400 hover:text-violet-600 font-medium transition-all flex items-center justify-center gap-2"
+                          >
+                             <Plus size={16} /> 添加自定义 OpenAI 服务
+                          </button>
+                       </div>
+                    </div>
+                )}
+
                 {activeSettingsTab === 'appearance' && (
                     <div className="space-y-6 animate-fade-in">
-                        {/* Background Mode */}
-                         <section>
+                        <section>
                             <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">背景风格</h3>
                             <div className="grid grid-cols-3 gap-3">
                                 {[
@@ -1004,8 +1248,7 @@ const App: React.FC = () => {
                             </div>
                         </section>
 
-                        {/* Custom Wallpaper Input */}
-                        {settings.backgroundMode === 'custom' && (
+                         {settings.backgroundMode === 'custom' && (
                              <div className="p-4 bg-gray-50 dark:bg-slate-900 rounded-xl border border-gray-100 dark:border-white/5 space-y-3 animate-fade-in">
                                  <h4 className="text-sm font-bold text-gray-700 dark:text-white">自定义壁纸设置</h4>
                                  <input 
@@ -1035,7 +1278,6 @@ const App: React.FC = () => {
 
                         <div className="h-px bg-gray-100 dark:bg-white/5" />
 
-                        {/* Opacity Slider */}
                         <section>
                             <div className="flex justify-between mb-2">
                                 <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">卡片透明度</h3>
@@ -1055,7 +1297,6 @@ const App: React.FC = () => {
                     </div>
                 )}
 
-                {/* Search Settings Tab */}
                 {activeSettingsTab === 'search' && (
                     <div className="space-y-4 animate-fade-in">
                          {searchEngines.map(engine => (
@@ -1124,28 +1365,26 @@ const App: React.FC = () => {
                     </div>
                 )}
 
-                {/* Diagnostics Tab */}
                 {activeSettingsTab === 'diagnose' && (
                   <div className="space-y-6 animate-fade-in">
-                     {/* Environment Status */}
                      <section className="p-4 bg-gray-50 dark:bg-slate-900 rounded-xl border border-gray-100 dark:border-white/5 space-y-4">
                         <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">环境变量检查</h3>
                         
                         <div className="space-y-2">
                            <div className="flex items-center justify-between">
-                              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">API Key (Google Gemini)</span>
+                              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Google API Key (API_KEY)</span>
                               {process.env.API_KEY && process.env.API_KEY.length > 5 ? (
                                 <div className="flex items-center gap-1.5 text-green-600 text-xs font-bold">
-                                   <CheckCircle2 size={14} /> 已配置
+                                   <CheckCircle2 size={14} /> 已配置 (ENV)
                                 </div>
                               ) : (
                                 <div className="flex items-center gap-1.5 text-red-500 text-xs font-bold">
-                                   <XCircle size={14} /> 未配置 / 为空
+                                   <XCircle size={14} /> 未配置
                                 </div>
                               )}
                            </div>
                            <div className="flex items-center justify-between">
-                              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">KV REST API URL</span>
+                              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Vercel KV (KV_REST_API_URL)</span>
                               {process.env.KV_REST_API_URL && process.env.KV_REST_API_URL.length > 10 ? (
                                 <div className="flex items-center gap-1.5 text-green-600 text-xs font-bold">
                                    <CheckCircle2 size={14} /> 已配置
@@ -1156,52 +1395,52 @@ const App: React.FC = () => {
                                 </div>
                               )}
                            </div>
-                           <div className="flex items-center justify-between">
-                              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">KV REST API Token</span>
-                              {process.env.KV_REST_API_TOKEN && process.env.KV_REST_API_TOKEN.length > 10 ? (
-                                <div className="flex items-center gap-1.5 text-green-600 text-xs font-bold">
-                                   <CheckCircle2 size={14} /> 已配置
-                                </div>
-                              ) : (
-                                <div className="flex items-center gap-1.5 text-red-500 text-xs font-bold">
-                                   <XCircle size={14} /> 未配置
-                                </div>
-                              )}
-                           </div>
                         </div>
 
-                        <div className="text-[10px] text-gray-400 leading-relaxed bg-white dark:bg-slate-800 p-2 rounded-lg border border-dashed border-gray-200 dark:border-white/10">
-                           <p>提示：如果显示“未配置”，请在 Vercel 项目设置中绑定 KV 数据库并填写 API_KEY，然后<strong>务必重新部署 (Redeploy)</strong> 以生效。</p>
-                        </div>
+                        {(!process.env.API_KEY || !process.env.KV_REST_API_URL) && (
+                            <div className="mt-4 p-3 bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/30 rounded-lg">
+                                <h4 className="text-xs font-bold text-red-600 mb-2 flex items-center gap-1"><AlertTriangle size={12}/> 配置指南</h4>
+                                <ul className="text-[10px] text-red-800 dark:text-red-300 space-y-1 list-disc list-inside">
+                                    {!process.env.API_KEY && <li>请在 Vercel 环境变量设置中添加 <code>API_KEY</code> (Google Gemini)。</li>}
+                                    {!process.env.KV_REST_API_URL && <li>请在 Vercel Storage 中创建一个 KV 数据库并连接到本项目，然后重新部署 (Redeploy)。</li>}
+                                </ul>
+                            </div>
+                        )}
                      </section>
 
-                     {/* Log Console */}
                      <section className="space-y-2">
-                        <div className="flex justify-between items-end">
-                           <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
-                              <Terminal size={12} /> 运行日志
+                        <div 
+                            className="flex justify-between items-center cursor-pointer select-none group"
+                            onClick={() => setIsLogsExpanded(!isLogsExpanded)}
+                        >
+                           <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2 group-hover:text-gray-600 dark:group-hover:text-gray-200 transition-colors">
+                              {isLogsExpanded ? <ChevronDown size={14}/> : <ChevronRight size={14}/>}
+                              运行日志
                            </h3>
-                           <button onClick={clearLogs} className="text-[10px] text-gray-400 hover:text-red-500">清空日志</button>
+                           <button onClick={(e) => { e.stopPropagation(); clearLogs(); }} className="text-[10px] text-gray-400 hover:text-red-500">清空</button>
                         </div>
-                        <div className="w-full h-64 bg-gray-900 text-gray-300 font-mono text-xs p-3 rounded-xl overflow-y-auto border border-gray-800 shadow-inner">
-                           {logs.length === 0 ? (
-                             <span className="text-gray-600 italic">暂无日志...</span>
-                           ) : (
-                             logs.map((log) => (
-                               <div key={log.id} className="mb-1.5 border-b border-gray-800 pb-1.5 last:border-0">
-                                 <span className="text-gray-500 mr-2">[{log.time}]</span>
-                                 <span className={cn(
-                                   "font-bold mr-2 uppercase text-[10px]",
-                                   log.level === 'error' ? 'text-red-500' : 
-                                   log.level === 'warn' ? 'text-yellow-500' : 'text-blue-500'
-                                 )}>
-                                   {log.level}
-                                 </span>
-                                 <span className="break-all whitespace-pre-wrap">{log.message}</span>
-                               </div>
-                             ))
-                           )}
-                        </div>
+                        
+                        {isLogsExpanded && (
+                            <div className="w-full h-64 bg-gray-900 text-gray-300 font-mono text-xs p-3 rounded-xl overflow-y-auto border border-gray-800 shadow-inner animate-fade-in-down">
+                            {logs.length === 0 ? (
+                                <span className="text-gray-600 italic">暂无日志...</span>
+                            ) : (
+                                logs.map((log) => (
+                                <div key={log.id} className="mb-1.5 border-b border-gray-800 pb-1.5 last:border-0">
+                                    <span className="text-gray-500 mr-2">[{log.time}]</span>
+                                    <span className={cn(
+                                    "font-bold mr-2 uppercase text-[10px]",
+                                    log.level === 'error' ? 'text-red-500' : 
+                                    log.level === 'warn' ? 'text-yellow-500' : 'text-blue-500'
+                                    )}>
+                                    {log.level}
+                                    </span>
+                                    <span className="break-all whitespace-pre-wrap">{log.message}</span>
+                                </div>
+                                ))
+                            )}
+                            </div>
+                        )}
                      </section>
                   </div>
                 )}
@@ -1209,7 +1448,10 @@ const App: React.FC = () => {
             
             <div className="p-6 pt-4 border-t border-gray-100 dark:border-white/10 bg-white dark:bg-slate-800 rounded-b-2xl">
               <button 
-                onClick={() => setShowSettingsModal(false)}
+                onClick={async () => {
+                    await saveSettings(settings);
+                    setShowSettingsModal(false);
+                }}
                 className="w-full py-3 bg-gray-900 text-white dark:bg-white dark:text-gray-900 rounded-xl font-bold hover:shadow-lg hover:scale-[1.02] transition-all"
               >
                 保存并关闭
@@ -1219,11 +1461,9 @@ const App: React.FC = () => {
         </Modal>
       )}
 
-      {/* Edit Link Modal */}
       {editingLink && (
         <Modal title={editingLink.link ? '编辑链接' : '新建链接'} onClose={() => { setEditingLink(null); setLinkForm({}); }}>
            <div className="p-6 flex flex-col md:flex-row gap-8">
-             {/* Left Form */}
              <div className="flex-1 space-y-5">
                <div>
                  <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">URL 地址</label>
@@ -1287,7 +1527,6 @@ const App: React.FC = () => {
                </button>
              </div>
 
-             {/* Right Preview */}
              <div className="w-full md:w-72 border-l border-gray-100 dark:border-white/5 pl-0 md:pl-8 flex flex-col items-center justify-center">
                <h4 className="text-sm font-bold text-gray-400 mb-6 uppercase tracking-wider">实时预览</h4>
                <div className="w-full bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-xl border border-gray-100 dark:border-white/5 relative overflow-hidden group">
