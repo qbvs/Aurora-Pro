@@ -12,13 +12,18 @@ const getAiClient = () => {
   return new GoogleGenAI({ apiKey });
 };
 
-const handleApiError = (error: any, context: string): never => {
-    const errorMessage = (error as any)?.message || '';
-    addLog('error', `AI ${context} failed: ${error}`);
-    if (errorMessage.includes('"code":429') || errorMessage.includes('RESOURCE_EXHAUSTED')) {
-        throw new Error('QUOTA_EXCEEDED');
+const handleApiError = (error: any, context: string): Error => {
+    const errorMessage = (error as any)?.message || String(error) || 'Unknown AI Error';
+    addLog('error', `AI ${context} failed: ${errorMessage}`);
+    if (String(errorMessage).includes('"code":429') || String(errorMessage).includes('RESOURCE_EXHAUSTED')) {
+        return new Error('QUOTA_EXCEEDED');
     }
-    throw error;
+    
+    if (error instanceof Error) {
+        return error;
+    }
+    
+    return new Error(String(errorMessage));
 };
 
 export const analyzeUrl = async (url: string): Promise<AIResponse> => {
@@ -64,7 +69,7 @@ export const analyzeUrl = async (url: string): Promise<AIResponse> => {
     return JSON.parse(text) as AIResponse;
 
   } catch (error) {
-    handleApiError(error, 'Analysis');
+    throw handleApiError(error, 'Analysis');
   }
 };
 
@@ -114,7 +119,7 @@ export const generateCategoryLinks = async (categoryTitle: string, count: number
     return result;
 
   } catch (error) {
-     handleApiError(error, 'Link Generation');
+     throw handleApiError(error, 'Link Generation');
   }
 };
 
