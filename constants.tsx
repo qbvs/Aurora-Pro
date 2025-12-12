@@ -66,6 +66,7 @@ export const INITIAL_DATA: Category[] = [
         url: 'https://github.com',
         description: '代码托管平台',
         color: '#181717',
+        clickCount: 10
       },
       {
         id: 'l-2',
@@ -73,6 +74,7 @@ export const INITIAL_DATA: Category[] = [
         url: 'https://chat.openai.com',
         description: 'AI 助手',
         color: '#10A37F',
+        clickCount: 8
       },
       {
         id: 'l-3',
@@ -80,6 +82,7 @@ export const INITIAL_DATA: Category[] = [
         url: 'https://vercel.com',
         description: '前端部署神器',
         color: '#000000',
+        clickCount: 6
       },
       {
         id: 'l-4',
@@ -87,6 +90,7 @@ export const INITIAL_DATA: Category[] = [
         url: 'https://youtube.com',
         description: '视频娱乐',
         color: '#FF0000',
+        clickCount: 5
       },
     ],
   },
@@ -101,6 +105,7 @@ export const INITIAL_DATA: Category[] = [
         url: 'https://stackoverflow.com',
         description: '技术问答',
         color: '#F48024',
+        clickCount: 2
       },
       {
         id: 'l-6',
@@ -108,6 +113,7 @@ export const INITIAL_DATA: Category[] = [
         url: 'https://tailwindcss.com',
         description: '原子化 CSS 框架',
         color: '#38B2AC',
+        clickCount: 1
       },
       {
         id: 'l-7',
@@ -115,6 +121,7 @@ export const INITIAL_DATA: Category[] = [
         url: 'https://react.dev',
         description: 'React 官方文档',
         color: '#61DAFB',
+        clickCount: 0
       },
     ],
   },
@@ -128,7 +135,8 @@ export const INITIAL_DATA: Category[] = [
             title: 'Dribbble',
             url: 'https://dribbble.com',
             description: '设计作品分享',
-            color: '#EA4C89'
+            color: '#EA4C89',
+            clickCount: 0
         }
     ]
   }

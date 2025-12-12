@@ -4,6 +4,7 @@ export interface LinkItem {
   url: string;
   description: string;
   color?: string; // Hex code for brand color
+  clickCount?: number; // Track usage frequency
 }
 
 export interface Category {

@@ -3,7 +3,8 @@ import {
   Settings, Plus, Search, Moon, Sun, LayoutGrid, 
   LogOut, Edit3, Trash2, X, Wand2, Globe, AlertCircle, 
   Image as ImageIcon, Upload, Palette, Type as TypeIcon, Lock,
-  Activity, CheckCircle2, XCircle, Terminal, Bot, Zap, RefreshCw, Key, Server, AlertTriangle, ChevronDown, ChevronRight
+  Activity, CheckCircle2, XCircle, Terminal, Bot, Zap, RefreshCw, Key, Server, AlertTriangle, ChevronDown, ChevronRight,
+  Flame // Add Flame icon import
 } from 'lucide-react';
 import { 
   Category, LinkItem, AppSettings, SearchEngine, 
@@ -23,6 +24,9 @@ import { twMerge } from "tailwind-merge";
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
+
+// --- Constants ---
+const COMMON_REC_ID = 'rec-1'; // ID for "Common Recommendations"
 
 // --- Helper Components ---
 
@@ -112,6 +116,50 @@ const App: React.FC = () => {
   const [genCount, setGenCount] = useState(4);
   const [isGeneratingLinks, setIsGeneratingLinks] = useState(false);
 
+  // -- Logic for Common Recommendations --
+  const updateCommonRecommendations = (cats: Category[]): Category[] => {
+      // 1. Collect ALL links from ALL categories EXCEPT the Common Rec one
+      let allLinks: LinkItem[] = [];
+      const seenUrls = new Set<string>();
+
+      cats.forEach(cat => {
+          if (cat.id === COMMON_REC_ID) return;
+          cat.links.forEach(link => {
+             // Deduplicate by URL to avoid showing the same site multiple times
+             const normalizedUrl = link.url.trim().replace(/\/$/, '');
+             if (!seenUrls.has(normalizedUrl)) {
+                 allLinks.push(link);
+                 seenUrls.add(normalizedUrl);
+             }
+          });
+      });
+
+      // 2. Sort by clickCount (descending)
+      allLinks.sort((a, b) => (b.clickCount || 0) - (a.clickCount || 0));
+
+      // 3. Take top 8
+      const topLinks = allLinks.slice(0, 8);
+
+      // 4. Update or Create 'rec-1' category
+      const commonCatIndex = cats.findIndex(c => c.id === COMMON_REC_ID);
+      
+      const newCommonCat: Category = {
+          id: COMMON_REC_ID,
+          title: '常用推荐',
+          icon: 'Flame',
+          links: topLinks.map(l => ({...l, id: `rec-${l.id}`})) // Create visual copies
+      };
+
+      if (commonCatIndex >= 0) {
+          const newCats = [...cats];
+          newCats[commonCatIndex] = newCommonCat;
+          return newCats;
+      } else {
+          // If it doesn't exist, prepend it
+          return [newCommonCat, ...cats];
+      }
+  };
+
   // -- Effects --
 
   // Logger Subscription
@@ -130,16 +178,24 @@ const App: React.FC = () => {
       addLog('info', "App Initializing...");
       setIsLoadingData(true);
       
-      // 1. Load Local Data First (Instant)
-      const localCats = await loadCategories();
+      // 1. Load Local Data First
+      let localCats = await loadCategories();
       const localSets = await loadSettings();
       const localEngines = await loadSearchEngines();
 
-      if (localCats) setCategories(localCats);
+      // Initial Sort of Common Recs
+      if (localCats) {
+         localCats = updateCommonRecommendations(localCats);
+         setCategories(localCats);
+      } else {
+         // Use Initial Data but run sort logic once
+         setCategories(updateCommonRecommendations(INITIAL_DATA));
+      }
+
       if (localSets) setLocalSettings(localSets);
       if (localEngines) setSearchEngines(localEngines);
 
-      setIsLoadingData(false); // Render UI immediately
+      setIsLoadingData(false);
 
       // 2. Sync from Cloud Background
       if (isKVConfigured()) {
@@ -151,9 +207,11 @@ const App: React.FC = () => {
                 syncSearchEnginesFromCloud()
               ]);
               
-              if (cloudCats) setCategories(cloudCats);
+              if (cloudCats) {
+                  const updatedCats = updateCommonRecommendations(cloudCats);
+                  setCategories(updatedCats);
+              }
               if (cloudSets) {
-                 // Ensure AI configs exist
                  if (!cloudSets.aiConfigs || cloudSets.aiConfigs.length === 0) {
                      cloudSets.aiConfigs = INITIAL_SETTINGS.aiConfigs;
                  }
@@ -164,10 +222,6 @@ const App: React.FC = () => {
           } catch (e) {
               addLog('error', `Cloud sync failed: ${e}`);
           }
-      } else {
-          addLog('warn', "Vercel KV not configured.");
-          if (!process.env.KV_REST_API_URL) addLog('warn', "Missing Env: KV_REST_API_URL");
-          if (!process.env.KV_REST_API_TOKEN) addLog('warn', "Missing Env: KV_REST_API_TOKEN");
       }
     };
 
@@ -227,9 +281,44 @@ const App: React.FC = () => {
   // -- Derived State --
   const activeSearchEngine = searchEngines.find(e => e.id === settings.activeSearchEngineId) || searchEngines[0];
   const kvStatus = isKVConfigured();
-  const totalLinks = categories.reduce((acc, cat) => acc + cat.links.length, 0);
+  // Filter out Common Recs from count to avoid double counting
+  const totalLinks = categories
+    .filter(c => c.id !== COMMON_REC_ID)
+    .reduce((acc, cat) => acc + cat.links.length, 0);
 
   // -- Handlers --
+
+  const handleLinkClick = async (category: Category, link: LinkItem) => {
+      // Open URL immediately
+      window.open(link.url, settings.openInNewTab ? '_blank' : '_self');
+
+      // If this is already a recommended link, we actually want to find the ORIGINAL link
+      // and increment that one, because 'rec-' links are just copies.
+      // But simplifying: we iterate all categories to find matching URL and increment count.
+      
+      const newCats = categories.map(cat => {
+          if (cat.id === COMMON_REC_ID) return cat; // Don't modify recs directly
+          
+          const hasLink = cat.links.some(l => l.url === link.url);
+          if (hasLink) {
+              return {
+                  ...cat,
+                  links: cat.links.map(l => {
+                      if (l.url === link.url) {
+                          return { ...l, clickCount: (l.clickCount || 0) + 1 };
+                      }
+                      return l;
+                  })
+              };
+          }
+          return cat;
+      });
+
+      // Recalculate Top 8
+      const finalCats = updateCommonRecommendations(newCats);
+      setCategories(finalCats);
+      await saveCategories(finalCats);
+  };
 
   const handleAdminAccess = () => {
     if (isAuthenticated) {
@@ -261,6 +350,7 @@ const App: React.FC = () => {
 
   const toggleEditMode = () => setIsEditMode(!isEditMode);
 
+  // ... (AI Config handlers remain same)
   const handleAiConfigChange = (id: string, updates: Partial<AIProviderConfig>) => {
       const newConfigs = settings.aiConfigs.map(c => 
           c.id === id ? { ...c, ...updates } : c
@@ -272,7 +362,6 @@ const App: React.FC = () => {
       }
       setLocalSettings({ ...settings, aiConfigs: newConfigs });
   };
-
   const handleAddAiProvider = () => {
     const newConfig: AIProviderConfig = {
         id: `ai-custom-${Date.now()}`,
@@ -286,7 +375,6 @@ const App: React.FC = () => {
     setLocalSettings(prev => ({ ...prev, aiConfigs: [...prev.aiConfigs, newConfig] }));
     setEditingAiConfig(newConfig);
   };
-
   const handleDeleteAiProvider = (id: string) => {
     setConfirmModal({
         isOpen: true,
@@ -301,23 +389,19 @@ const App: React.FC = () => {
         }
     });
   };
-
   const handleFetchModels = async (config: AIProviderConfig) => {
       setIsFetchingModels(true);
       const models = await fetchAiModels(config);
       if (models.length > 0) {
           setAvailableModels(models);
-          // Auto fill first if default
           if (!config.model || config.model === 'gpt-3.5-turbo') {
               handleAiConfigChange(config.id, { model: models[0] });
           }
       } else {
-          // Explicit feedback for user when manual refresh fails
-          alert('无法自动获取模型列表 (可能是服务商未开放列表接口)。\n\n请直接在输入框中手动填写模型名称 (例如: deepseek-chat, longcat-flash 等)。');
+          alert('无法自动获取模型列表 (可能是服务商未开放列表接口)。\n\n请直接在输入框中手动填写模型名称。');
       }
       setIsFetchingModels(false);
   };
-
   const handleTestConnection = async (config: AIProviderConfig) => {
       setTestStatus({ status: 'loading' });
       const result = await testAiConnection(config);
@@ -325,9 +409,7 @@ const App: React.FC = () => {
           status: result.success ? 'success' : 'fail',
           message: result.message
       });
-      
       if (result.success) {
-          // Try fetching models silently to populate list
           const models = await fetchAiModels(config);
           if (models.length > 0) setAvailableModels(models);
       }
@@ -356,10 +438,14 @@ const App: React.FC = () => {
         isOpen: true,
         message: '确定要删除这个链接吗？',
         onConfirm: () => {
-            const newCats = categories.map(cat => {
-            if (cat.id !== catId) return cat;
-            return { ...cat, links: cat.links.filter(l => l.id !== linkId) };
+            let newCats = categories.map(cat => {
+                if (cat.id !== catId) return cat;
+                return { ...cat, links: cat.links.filter(l => l.id !== linkId) };
             });
+            
+            // Recalculate common recs in case we deleted a popular link
+            newCats = updateCommonRecommendations(newCats);
+            
             setCategories(newCats);
             saveCategories(newCats);
             setConfirmModal(null);
@@ -375,10 +461,11 @@ const App: React.FC = () => {
       title: linkForm.title,
       url: linkForm.url.startsWith('http') ? linkForm.url : `https://${linkForm.url}`,
       description: linkForm.description || '',
-      color: linkForm.color || '#666'
+      color: linkForm.color || '#666',
+      clickCount: linkForm.clickCount || 0
     };
 
-    const newCats = categories.map(cat => {
+    let newCats = categories.map(cat => {
       if (cat.id !== editingLink.catId) return cat;
       if (editingLink.link) {
         return { ...cat, links: cat.links.map(l => l.id === editingLink.link!.id ? newLink : l) };
@@ -386,6 +473,9 @@ const App: React.FC = () => {
         return { ...cat, links: [...cat.links, newLink] };
       }
     });
+
+    // Update common recs
+    newCats = updateCommonRecommendations(newCats);
 
     setCategories(newCats);
     await saveCategories(newCats);
@@ -433,7 +523,6 @@ const App: React.FC = () => {
       }
 
       // 3. Client-side Deduplication (Safety Net)
-      // Filter out links that match existing titles or domains, just in case AI ignored the prompt.
       const uniqueNewLinks: LinkItem[] = [];
       
       for (const l of newLinksData) {
@@ -449,7 +538,7 @@ const App: React.FC = () => {
           // Check if Domain matches existing domains
           if (newDomain && existingDomains.has(newDomain)) continue;
           
-          // Also check against other NEW links we just added in this loop (prevent AI returning duplicates in same batch)
+          // Also check against other NEW links
           const isDuplicateInBatch = uniqueNewLinks.some(ul => 
               ul.title.toLowerCase().trim() === newTitleLower || 
               (newDomain && ul.url.includes(newDomain))
@@ -461,7 +550,8 @@ const App: React.FC = () => {
             title: l.title,
             url: l.url,
             description: l.description || '',
-            color: l.color || '#666'
+            color: l.color || '#666',
+            clickCount: 0 // New links start at 0
           });
       }
 
@@ -470,10 +560,14 @@ const App: React.FC = () => {
           return;
       }
 
-      const newCats = categories.map(cat => {
+      let newCats = categories.map(cat => {
         if (cat.id !== showGenLinksModal.catId) return cat;
         return { ...cat, links: [...cat.links, ...uniqueNewLinks] };
       });
+
+      // Recalculate (though new links won't be popular yet)
+      newCats = updateCommonRecommendations(newCats);
+
       setCategories(newCats);
       await saveCategories(newCats);
       setShowGenLinksModal(null);
@@ -491,23 +585,21 @@ const App: React.FC = () => {
     window.open(url, '_blank');
   };
 
+  // ... (Engine handlers same)
   const handleSaveEngine = async () => {
     if (!engineForm.name || !engineForm.searchUrlPattern) return;
-    
     const newEngine: SearchEngine = {
         id: `se-${Date.now()}`,
         name: engineForm.name,
         baseUrl: engineForm.baseUrl || 'https://google.com',
         searchUrlPattern: engineForm.searchUrlPattern
     };
-
     const newEngines = [...searchEngines, newEngine];
     setSearchEngines(newEngines);
     await saveSearchEngines(newEngines);
     setIsAddingEngine(false);
     setEngineForm({});
   };
-
   const handleDeleteEngine = (id: string) => {
       if (searchEngines.length <= 1) {
           alert("至少保留一个搜索引擎");
@@ -524,14 +616,12 @@ const App: React.FC = () => {
         }
         setConfirmModal(null);
       };
-
       setConfirmModal({
           isOpen: true,
           message: "确定删除这个搜索引擎吗？",
           onConfirm: doDelete
       });
   };
-
   const handleAiFillEngine = async () => {
       if (!engineForm.baseUrl) return alert('请先输入搜索引擎主页 URL');
       setIsAiLoading(true);
@@ -548,7 +638,6 @@ const App: React.FC = () => {
           setIsAiLoading(false);
       }
   };
-
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -565,7 +654,6 @@ const App: React.FC = () => {
         reader.readAsDataURL(file);
     }
   };
-
   const handleGenerateAppIcon = async () => {
       setIsAiLoading(true);
       try {
@@ -579,7 +667,6 @@ const App: React.FC = () => {
       }
   };
 
-  // Loading Screen
   if (isLoadingData) {
     return (
         <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-slate-950">
@@ -590,9 +677,6 @@ const App: React.FC = () => {
         </div>
     );
   }
-
-  // ... rest of the App component (render logic) remains the same
-  // (We only changed the data loading logic above)
 
   return (
     <div className="min-h-screen flex text-gray-900 dark:text-gray-100 transition-colors duration-300 relative">
@@ -797,7 +881,7 @@ const App: React.FC = () => {
                     )}
 
                   </div>
-                  {isEditMode && (
+                  {isEditMode && category.id !== COMMON_REC_ID && (
                     <div className="flex gap-2">
                        <button className="px-3 py-1.5 bg-violet-50 text-violet-600 rounded-lg text-sm font-medium flex items-center gap-1 hover:bg-violet-100 transition-colors"
                         onClick={() => setShowGenLinksModal({catId: category.id, title: category.title})}
@@ -816,13 +900,18 @@ const App: React.FC = () => {
                        </button>
                     </div>
                   )}
+                  {isEditMode && category.id === COMMON_REC_ID && (
+                     <div className="px-3 py-1.5 bg-gray-100 dark:bg-white/10 text-gray-400 rounded-lg text-xs font-bold flex items-center gap-1 cursor-not-allowed">
+                        <Lock size={12} /> 自动管理
+                     </div>
+                  )}
                 </div>
                 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   {category.links.map((link) => (
                     <div 
                       key={link.id}
-                      onClick={() => !isEditMode && window.open(link.url, settings.openInNewTab ? '_blank' : '_self')}
+                      onClick={() => !isEditMode && handleLinkClick(category, link)}
                       className={cn(
                         "relative group flex items-start gap-4 p-4 rounded-2xl transition-all duration-300",
                         isEditMode ? 'bg-gray-50 dark:bg-slate-800/50 border border-gray-200 dark:border-white/5 cursor-move' : 'bg-white dark:bg-slate-800 hover:shadow-xl hover:-translate-y-1 cursor-pointer border border-transparent hover:border-violet-100 dark:hover:border-violet-900/30'
@@ -834,7 +923,7 @@ const App: React.FC = () => {
                         <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-1">{link.description}</p>
                       </div>
                       
-                      {isEditMode && (
+                      {isEditMode && category.id !== COMMON_REC_ID && (
                         <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white dark:bg-slate-800 p-1 rounded-lg shadow-sm z-10">
                           <button onClick={(e) => { e.stopPropagation(); setEditingLink({ catId: category.id, link }); setLinkForm({...link}); }} className="p-1.5 text-blue-500 hover:bg-blue-50 rounded">
                             <Edit3 size={14} />
@@ -847,7 +936,7 @@ const App: React.FC = () => {
                     </div>
                   ))}
                   
-                  {isEditMode && (
+                  {isEditMode && category.id !== COMMON_REC_ID && (
                     <button 
                       onClick={() => {
                         setEditingLink({ catId: category.id });
@@ -867,7 +956,7 @@ const App: React.FC = () => {
         </div>
       </main>
 
-      {/* --- Modals --- */}
+      {/* ... Modals (No changes needed below) ... */}
       
       {showLoginModal && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fade-in">

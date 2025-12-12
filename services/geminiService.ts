@@ -189,10 +189,15 @@ export const analyzeUrl = async (url: string): Promise<AIResponse> => {
   addLog('info', `Analyzing ${url} using ${config.model}`);
 
   const promptText = `
-    Analyze the following URL: ${url}.
-    I need you to act as a web scraper and metadata extractor.
+    Task: Extract metadata for the website URL: "${url}".
+    Requirements:
+    1. Title: The official name of the website.
+    2. Description: A concise summary in Chinese (max 10 words).
+    3. Brand Color: The primary hex color code.
+    4. Search URL: If it's a search engine (like Google, Bing), provide the search query pattern.
+    
     Return JSON ONLY. Format:
-    { "title": "...", "description": "max 10 words Chinese", "brandColor": "#hex", "searchUrlPattern": "..." }
+    { "title": "...", "description": "...", "brandColor": "#hex", "searchUrlPattern": "..." }
   `;
 
   try {
@@ -232,7 +237,7 @@ export const analyzeUrl = async (url: string): Promise<AIResponse> => {
             body: JSON.stringify({
                 model: config.model,
                 messages: [
-                    { role: "system", content: "You are a JSON-only response bot. Output valid JSON." },
+                    { role: "system", content: "You are a web metadata expert. Return valid JSON only." },
                     { role: "user", content: promptText }
                 ],
                 response_format: { type: "json_object" } 
@@ -260,16 +265,24 @@ export const generateCategoryLinks = async (categoryTitle: string, count: number
   
   addLog('info', `Generating links for ${categoryTitle} using ${config.model}. Exclude count: ${existingUrls.length}`);
 
-  // Create an exclusion string. Limit to 50 URLs to prevent hitting token limits if the user has a massive library.
+  // Create an exclusion string.
   const excludeText = existingUrls.length > 0 
-    ? `IMPORTANT: Do NOT include the following websites or URLs: ${existingUrls.slice(0, 50).join(', ')}. Provide fresh suggestions only.` 
+    ? `Do NOT include these URLs: ${existingUrls.slice(0, 50).join(', ')}.` 
     : '';
 
   const promptText = `
-      Generate ${count} POPULAR and HIGH-QUALITY website links for category "${categoryTitle}".
-      ${excludeText}
+      ROLE: You are an expert curator of internet resources.
+      TASK: Suggest ${count} of the absolute BEST, MOST POPULAR, and HIGH-QUALITY websites for the category: "${categoryTitle}".
+      
+      CONSTRAINTS:
+      1. **ACCURACY IS PARAMOUNT**: Only provide real, existing, and functional URLs.
+      2. **OFFICIAL URLs**: Use the main homepage (e.g., "https://github.com" not "https://github.com/features").
+      3. **PROTOCOL**: All URLs must start with "https://".
+      4. **LANGUAGE**: Descriptions must be in Chinese.
+      5. ${excludeText}
+      
       Return JSON ONLY array. Format:
-      [ { "title": "...", "url": "...", "description": "max 10 words Chinese", "color": "#hex" }, ... ]
+      [ { "title": "...", "url": "https://...", "description": "max 10 words Chinese", "color": "#hex" }, ... ]
   `;
 
   try {
@@ -312,7 +325,7 @@ export const generateCategoryLinks = async (categoryTitle: string, count: number
             body: JSON.stringify({
                 model: config.model,
                 messages: [
-                    { role: "system", content: "You are a JSON-only response bot. Output valid JSON array." },
+                    { role: "system", content: "You are a JSON-only response bot. Provide high-quality, real URLs." },
                     { role: "user", content: promptText }
                 ]
             })
@@ -334,7 +347,21 @@ export const getAiGreeting = async (): Promise<string> => {
   const config = getActiveConfig();
   if (!config.apiKey) return "";
   
-  const promptText = `Generate a 15-word inspiring Chinese greeting for a developer. No quotes.`;
+  // Revised prompt to be very strict about output format
+  const promptText = `
+    Task: Output a single, short, inspiring Chinese sentence for a developer's dashboard.
+    Content Style: Famous quotes (名人名句), philosophical thoughts, or warm greetings.
+    
+    STRICT Constraints:
+    1. Output **ONLY** Simplified Chinese characters.
+    2. **ABSOLUTELY NO** Pinyin.
+    3. **ABSOLUTELY NO** English translation.
+    4. **NO** explanations or labels.
+    5. Length: Keep it under 25 characters.
+    
+    Example Output:
+    星光不问赶路人，时光不负有心人。
+  `;
 
   try {
      if (config.type === 'google') {
