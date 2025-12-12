@@ -2,9 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { 
   Settings, Plus, Search, Moon, Sun, LayoutGrid, 
   LogOut, Edit3, Trash2, X, Wand2, Globe, AlertCircle, 
-  Image as ImageIcon, Upload, Palette, Type as TypeIcon, Lock
+  Image as ImageIcon, Upload, Palette, Type as TypeIcon, Lock,
+  Activity, CheckCircle2, XCircle, Terminal
 } from 'lucide-react';
-import { Category, LinkItem, AppSettings, SearchEngine } from './types';
+import { 
+  Category, LinkItem, AppSettings, SearchEngine, 
+  addLog, subscribeLogs, getLogs, clearLogs, LogEntry 
+} from './types';
 import { INITIAL_DATA, INITIAL_SETTINGS, INITIAL_SEARCH_ENGINES } from './constants';
 import { 
   loadCategories, saveCategories, loadSettings, saveSettings, 
@@ -89,7 +93,8 @@ const App: React.FC = () => {
   const [isAddingEngine, setIsAddingEngine] = useState(false);
 
   // Settings Tab State
-  const [activeSettingsTab, setActiveSettingsTab] = useState<'general' | 'appearance' | 'search'>('general');
+  const [activeSettingsTab, setActiveSettingsTab] = useState<'general' | 'appearance' | 'search' | 'diagnose'>('general');
+  const [logs, setLogs] = useState<LogEntry[]>([]);
 
   // AI Generation State
   const [isAiLoading, setIsAiLoading] = useState(false);
@@ -99,12 +104,20 @@ const App: React.FC = () => {
 
   // -- Effects --
 
+  // Logger Subscription
+  useEffect(() => {
+    const unsub = subscribeLogs(() => {
+        setLogs(getLogs());
+    });
+    // Init logs
+    setLogs(getLogs());
+    return unsub;
+  }, []);
+
   // Load Data (Async for Cloud Sync)
   useEffect(() => {
-    // Debug log to confirm deployment version
-    console.log("Aurora Pro: App Initialized v1.1.0 (Fixed ImportMap)");
-
     const initData = async () => {
+      addLog('info', "App Initializing...");
       setIsLoadingData(true);
       
       const [savedCats, savedSets, savedEngines] = await Promise.all([
@@ -118,6 +131,7 @@ const App: React.FC = () => {
       if (savedEngines) setSearchEngines(savedEngines);
       
       setIsLoadingData(false);
+      addLog('info', "App Data Loaded");
     };
 
     initData();
@@ -292,7 +306,7 @@ const App: React.FC = () => {
       }));
     } catch (e) {
       console.error(e);
-      alert('AI 识别失败，请检查网络或 API Key');
+      alert('AI 识别失败，请查看系统诊断日志');
     } finally {
       setIsAiLoading(false);
     }
@@ -304,6 +318,13 @@ const App: React.FC = () => {
     try {
       const newLinksData = await generateCategoryLinks(showGenLinksModal.title, genCount);
       
+      // CRITICAL FIX: If AI fails and returns empty array, DO NOT CLOSE MODAL.
+      if (!newLinksData || newLinksData.length === 0) {
+        alert("AI 生成未能返回结果。请转到「全局设置 -> 系统诊断」查看错误日志。这通常是因为 API Key 无效或 Vercel 环境变量未正确同步。");
+        setIsGeneratingLinks(false);
+        return; // Stop here
+      }
+
       const newLinks: LinkItem[] = newLinksData.map((l, i) => ({
         id: `gen-${Date.now()}-${i}`,
         title: l.title || 'Unknown',
@@ -322,7 +343,7 @@ const App: React.FC = () => {
       setShowGenLinksModal(null);
     } catch (e) {
       console.error(e);
-      alert('AI 生成失败，请检查配置');
+      alert('AI 生成过程发生错误，请查看系统诊断');
     } finally {
       setIsGeneratingLinks(false);
     }
@@ -847,7 +868,7 @@ const App: React.FC = () => {
                         activeSettingsTab === 'general' ? 'bg-white dark:bg-slate-800 shadow-sm text-violet-600' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
                     )}
                 >
-                    <TypeIcon size={16} /> 站点信息
+                    <TypeIcon size={16} /> 站点
                 </button>
                 <button 
                     onClick={() => setActiveSettingsTab('appearance')}
@@ -856,7 +877,7 @@ const App: React.FC = () => {
                         activeSettingsTab === 'appearance' ? 'bg-white dark:bg-slate-800 shadow-sm text-violet-600' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
                     )}
                 >
-                    <Palette size={16} /> 外观定制
+                    <Palette size={16} /> 外观
                 </button>
                 <button 
                     onClick={() => setActiveSettingsTab('search')}
@@ -865,7 +886,16 @@ const App: React.FC = () => {
                         activeSettingsTab === 'search' ? 'bg-white dark:bg-slate-800 shadow-sm text-violet-600' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
                     )}
                 >
-                    <Search size={16} /> 搜索引擎
+                    <Search size={16} /> 搜索
+                </button>
+                <button 
+                    onClick={() => setActiveSettingsTab('diagnose')}
+                    className={cn(
+                        "flex-1 py-2 text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-2",
+                        activeSettingsTab === 'diagnose' ? 'bg-white dark:bg-slate-800 shadow-sm text-red-600' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+                    )}
+                >
+                    <Activity size={16} /> 诊断
                 </button>
             </div>
 
@@ -1074,6 +1104,88 @@ const App: React.FC = () => {
                             </div>
                         )}
                     </div>
+                )}
+
+                {/* Diagnostics Tab */}
+                {activeSettingsTab === 'diagnose' && (
+                  <div className="space-y-6 animate-fade-in">
+                     {/* Environment Status */}
+                     <section className="p-4 bg-gray-50 dark:bg-slate-900 rounded-xl border border-gray-100 dark:border-white/5 space-y-4">
+                        <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">环境变量检查</h3>
+                        
+                        <div className="space-y-2">
+                           <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">API Key (Google Gemini)</span>
+                              {process.env.API_KEY && process.env.API_KEY.length > 5 ? (
+                                <div className="flex items-center gap-1.5 text-green-600 text-xs font-bold">
+                                   <CheckCircle2 size={14} /> 已配置
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-1.5 text-red-500 text-xs font-bold">
+                                   <XCircle size={14} /> 未配置 / 为空
+                                </div>
+                              )}
+                           </div>
+                           <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">KV REST API URL</span>
+                              {process.env.KV_REST_API_URL && process.env.KV_REST_API_URL.length > 10 ? (
+                                <div className="flex items-center gap-1.5 text-green-600 text-xs font-bold">
+                                   <CheckCircle2 size={14} /> 已配置
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-1.5 text-red-500 text-xs font-bold">
+                                   <XCircle size={14} /> 未配置
+                                </div>
+                              )}
+                           </div>
+                           <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">KV REST API Token</span>
+                              {process.env.KV_REST_API_TOKEN && process.env.KV_REST_API_TOKEN.length > 10 ? (
+                                <div className="flex items-center gap-1.5 text-green-600 text-xs font-bold">
+                                   <CheckCircle2 size={14} /> 已配置
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-1.5 text-red-500 text-xs font-bold">
+                                   <XCircle size={14} /> 未配置
+                                </div>
+                              )}
+                           </div>
+                        </div>
+
+                        <div className="text-[10px] text-gray-400 leading-relaxed bg-white dark:bg-slate-800 p-2 rounded-lg border border-dashed border-gray-200 dark:border-white/10">
+                           <p>提示：如果显示“未配置”，请在 Vercel 项目设置中绑定 KV 数据库并填写 API_KEY，然后<strong>务必重新部署 (Redeploy)</strong> 以生效。</p>
+                        </div>
+                     </section>
+
+                     {/* Log Console */}
+                     <section className="space-y-2">
+                        <div className="flex justify-between items-end">
+                           <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
+                              <Terminal size={12} /> 运行日志
+                           </h3>
+                           <button onClick={clearLogs} className="text-[10px] text-gray-400 hover:text-red-500">清空日志</button>
+                        </div>
+                        <div className="w-full h-64 bg-gray-900 text-gray-300 font-mono text-xs p-3 rounded-xl overflow-y-auto border border-gray-800 shadow-inner">
+                           {logs.length === 0 ? (
+                             <span className="text-gray-600 italic">暂无日志...</span>
+                           ) : (
+                             logs.map((log) => (
+                               <div key={log.id} className="mb-1.5 border-b border-gray-800 pb-1.5 last:border-0">
+                                 <span className="text-gray-500 mr-2">[{log.time}]</span>
+                                 <span className={cn(
+                                   "font-bold mr-2 uppercase text-[10px]",
+                                   log.level === 'error' ? 'text-red-500' : 
+                                   log.level === 'warn' ? 'text-yellow-500' : 'text-blue-500'
+                                 )}>
+                                   {log.level}
+                                 </span>
+                                 <span className="break-all whitespace-pre-wrap">{log.message}</span>
+                               </div>
+                             ))
+                           )}
+                        </div>
+                     </section>
+                  </div>
                 )}
             </div>
             

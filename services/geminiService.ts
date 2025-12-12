@@ -1,17 +1,19 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import { AIResponse, LinkItem } from "../types";
+import { AIResponse, LinkItem, addLog } from "../types";
 
 // Helper to get client instance safely
 const getAiClient = () => {
   const apiKey = process.env.API_KEY;
-  if (!apiKey) {
-    console.error("Gemini API Key is missing! Check your Vercel Environment Variables.");
+  // Check for empty string or undefined
+  if (!apiKey || apiKey.trim().length === 0) {
+    addLog('error', "Gemini API Key is missing or empty! Check Vercel Environment Variables.");
     return null;
   }
   return new GoogleGenAI({ apiKey });
 };
 
 export const analyzeUrl = async (url: string): Promise<AIResponse> => {
+  addLog('info', `AI Analyzing URL: ${url}`);
   const ai = getAiClient();
   if (!ai) {
     return {
@@ -51,22 +53,23 @@ export const analyzeUrl = async (url: string): Promise<AIResponse> => {
     });
 
     const text = response.text;
-    if (!text) throw new Error("No response from AI");
+    if (!text) throw new Error("No response text from AI");
     
+    addLog('info', `AI Analysis Success for ${url}`);
     return JSON.parse(text) as AIResponse;
 
   } catch (error) {
-    console.error("AI Analysis failed:", error);
-    // Return safe fallback instead of throwing to prevent app crash
+    addLog('error', `AI Analysis failed for ${url}: ${error}`);
     return {
       title: "识别失败",
-      description: "AI 暂时无法访问",
+      description: "AI 暂时无法访问，请查看系统诊断日志",
       brandColor: "#cccccc"
     };
   }
 };
 
 export const generateCategoryLinks = async (categoryTitle: string, count: number): Promise<Partial<LinkItem>[]> => {
+  addLog('info', `AI Generating links for category: ${categoryTitle}`);
   const ai = getAiClient();
   if (!ai) return [];
 
@@ -102,11 +105,16 @@ export const generateCategoryLinks = async (categoryTitle: string, count: number
     });
 
     const text = response.text;
-    if (!text) return [];
-    return JSON.parse(text) as Partial<LinkItem>[];
+    if (!text) {
+        addLog('warn', "AI returned empty text for category links");
+        return [];
+    }
+    const result = JSON.parse(text) as Partial<LinkItem>[];
+    addLog('info', `AI generated ${result.length} links`);
+    return result;
 
   } catch (error) {
-    console.error("AI Generation failed:", error);
+    addLog('error', `AI Generation failed: ${error}`);
     return [];
   }
 };
@@ -131,7 +139,8 @@ export const getAiGreeting = async (): Promise<string> => {
     
     return response.text?.trim() || "";
   } catch (e) {
-    console.error("Greeting gen failed", e);
+    // Silent fail for greeting is okay, but log it
+    // addLog('warn', `Greeting failed: ${e}`);
     return "";
   }
 };
@@ -155,7 +164,7 @@ export const suggestIcon = async (text: string): Promise<string> => {
     const iconName = response.text?.trim().replace(/['"`]/g, '') || "Sparkles";
     return iconName.split(' ')[0];
   } catch (e) {
-    console.error("Icon suggestion failed", e);
+    addLog('error', `Icon suggestion failed: ${e}`);
     return "Sparkles";
   }
 };

@@ -1,4 +1,4 @@
-import { Category, AppSettings, SearchEngine } from '../types';
+import { Category, AppSettings, SearchEngine, addLog } from '../types';
 
 const DATA_KEY = 'aurora_data_v1';
 const SETTINGS_KEY = 'aurora_settings_v1';
@@ -12,18 +12,15 @@ export const isKVConfigured = (): boolean => {
   // Strict check for non-empty strings
   const isConfigured = !!(url && url.length > 0 && token && token.length > 0);
   
-  if (!isConfigured) {
-    // Only log once or in dev to avoid spam, but here we keep it simple for debugging
-    // console.log("KV Sync Status: Not Configured.");
-  }
-  
   return isConfigured;
 };
 
 // --- Cloud Sync Helpers (Vercel KV REST API) ---
 
 const kvFetch = async (command: string, key: string, value?: any) => {
-  if (!isKVConfigured()) return null;
+  if (!isKVConfigured()) {
+    return null;
+  }
 
   // Safe URL handling: remove trailing slash if present to avoid double slash
   const baseUrl = process.env.KV_REST_API_URL?.replace(/\/$/, '');
@@ -43,9 +40,19 @@ const kvFetch = async (command: string, key: string, value?: any) => {
       body: body,
     });
 
+    if (!response.ok) {
+        addLog('error', `KV HTTP Error: ${response.status} ${response.statusText}`);
+        return null;
+    }
+
     const result = await response.json();
     
     // Vercel KV REST response format: { result: "..." }
+    if (result.error) {
+        addLog('error', `KV API Error: ${result.error}`);
+        return null;
+    }
+
     if (result.result) {
        // If it's a GET command, the result is the JSON string we stored
        try {
@@ -56,7 +63,7 @@ const kvFetch = async (command: string, key: string, value?: any) => {
     }
     return null;
   } catch (error) {
-    console.error(`KV Error [${command}]:`, error);
+    addLog('error', `KV Fetch Exception [${command}]: ${error}`);
     return null;
   }
 };
