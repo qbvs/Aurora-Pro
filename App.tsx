@@ -12,7 +12,8 @@ import {
 import { INITIAL_DATA, INITIAL_SETTINGS, INITIAL_SEARCH_ENGINES } from './constants';
 import { 
   loadCategories, saveCategories, loadSettings, saveSettings, 
-  loadSearchEngines, saveSearchEngines, isKVConfigured
+  loadSearchEngines, saveSearchEngines, isKVConfigured,
+  syncCategoriesFromCloud, syncSettingsFromCloud, syncSearchEnginesFromCloud
 } from './services/storageService';
 import { analyzeUrl, generateCategoryLinks, getAiGreeting, suggestIcon, testAiConnection, fetchAiModels } from './services/geminiService';
 import { Icon } from './components/Icon';
@@ -129,23 +130,37 @@ const App: React.FC = () => {
       addLog('info', "App Initializing...");
       setIsLoadingData(true);
       
-      const [savedCats, savedSets, savedEngines] = await Promise.all([
-        loadCategories(),
-        loadSettings(),
-        loadSearchEngines()
-      ]);
+      // 1. Load Local Data First (Instant)
+      const localCats = await loadCategories();
+      const localSets = await loadSettings();
+      const localEngines = await loadSearchEngines();
 
-      if (savedCats) setCategories(savedCats);
-      if (savedSets) {
-          if (!savedSets.aiConfigs || savedSets.aiConfigs.length === 0) {
-              savedSets.aiConfigs = INITIAL_SETTINGS.aiConfigs;
+      if (localCats) setCategories(localCats);
+      if (localSets) setLocalSettings(localSets);
+      if (localEngines) setSearchEngines(localEngines);
+
+      setIsLoadingData(false); // Render UI immediately
+
+      // 2. Sync from Cloud Background
+      if (isKVConfigured()) {
+          addLog('info', "Syncing from cloud...");
+          const [cloudCats, cloudSets, cloudEngines] = await Promise.all([
+            syncCategoriesFromCloud(),
+            syncSettingsFromCloud(),
+            syncSearchEnginesFromCloud()
+          ]);
+          
+          if (cloudCats) setCategories(cloudCats);
+          if (cloudSets) {
+             // Ensure AI configs exist
+             if (!cloudSets.aiConfigs || cloudSets.aiConfigs.length === 0) {
+                 cloudSets.aiConfigs = INITIAL_SETTINGS.aiConfigs;
+             }
+             setLocalSettings(cloudSets);
           }
-          setLocalSettings(savedSets);
+          if (cloudEngines) setSearchEngines(cloudEngines);
+          addLog('info', "Cloud sync complete");
       }
-      if (savedEngines) setSearchEngines(savedEngines);
-      
-      setIsLoadingData(false);
-      addLog('info', "App Data Loaded");
     };
 
     initData();
@@ -524,6 +539,9 @@ const App: React.FC = () => {
         </div>
     );
   }
+
+  // ... rest of the App component (render logic) remains the same
+  // (We only changed the data loading logic above)
 
   return (
     <div className="min-h-screen flex text-gray-900 dark:text-gray-100 transition-colors duration-300 relative">
@@ -1215,6 +1233,7 @@ const App: React.FC = () => {
                     </div>
                 )}
 
+                {/* ... other tabs ... */}
                 {activeSettingsTab === 'appearance' && (
                     <div className="space-y-6 animate-fade-in">
                         <section>
@@ -1461,6 +1480,7 @@ const App: React.FC = () => {
         </Modal>
       )}
 
+      {/* ... Edit Modals ... */}
       {editingLink && (
         <Modal title={editingLink.link ? '编辑链接' : '新建链接'} onClose={() => { setEditingLink(null); setLinkForm({}); }}>
            <div className="p-6 flex flex-col md:flex-row gap-8">

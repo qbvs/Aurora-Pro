@@ -8,21 +8,14 @@ const ENGINES_KEY = 'aurora_engines_v1';
 export const isKVConfigured = (): boolean => {
   const url = process.env.KV_REST_API_URL;
   const token = process.env.KV_REST_API_TOKEN;
-  
-  // Strict check for non-empty strings
-  const isConfigured = !!(url && url.length > 0 && token && token.length > 0);
-  
-  return isConfigured;
+  return !!(url && url.length > 0 && token && token.length > 0);
 };
 
 // --- Cloud Sync Helpers (Vercel KV REST API) ---
 
 const kvFetch = async (command: string, key: string, value?: any) => {
-  if (!isKVConfigured()) {
-    return null;
-  }
+  if (!isKVConfigured()) return null;
 
-  // Safe URL handling: remove trailing slash if present to avoid double slash
   const baseUrl = process.env.KV_REST_API_URL?.replace(/\/$/, '');
   const url = `${baseUrl}/`;
   const token = process.env.KV_REST_API_TOKEN;
@@ -34,27 +27,20 @@ const kvFetch = async (command: string, key: string, value?: any) => {
 
     const response = await fetch(url, {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
+      headers: { Authorization: `Bearer ${token}` },
       body: body,
     });
 
     if (!response.ok) {
-        addLog('error', `KV HTTP Error: ${response.status} ${response.statusText}`);
+        // Silent fail for logs to avoid spamming UI during simple syncs
+        console.error(`KV HTTP Error: ${response.status}`);
         return null;
     }
 
     const result = await response.json();
-    
-    // Vercel KV REST response format: { result: "..." }
-    if (result.error) {
-        addLog('error', `KV API Error: ${result.error}`);
-        return null;
-    }
+    if (result.error) return null;
 
     if (result.result) {
-       // If it's a GET command, the result is the JSON string we stored
        try {
          return typeof result.result === 'string' ? JSON.parse(result.result) : result.result;
        } catch {
@@ -63,91 +49,95 @@ const kvFetch = async (command: string, key: string, value?: any) => {
     }
     return null;
   } catch (error) {
-    addLog('error', `KV Fetch Exception [${command}]: ${error}`);
+    console.error(`KV Fetch Exception:`, error);
     return null;
   }
+};
+
+// --- Generic Helpers ---
+
+const saveToLocal = (key: string, data: any) => {
+    localStorage.setItem(key, JSON.stringify(data));
+};
+
+const getFromLocal = <T>(key: string): T | null => {
+    try {
+        const data = localStorage.getItem(key);
+        return data ? JSON.parse(data) : null;
+    } catch {
+        return null;
+    }
 };
 
 // --- Categories ---
 
 export const saveCategories = async (categories: Category[]) => {
-  // 1. Save Local
-  localStorage.setItem(DATA_KEY, JSON.stringify(categories));
-  
-  // 2. Save Cloud (Fire and forget to avoid UI blocking, or await if needed)
-  if (isKVConfigured()) {
-    await kvFetch('SET', DATA_KEY, categories);
-  }
+  saveToLocal(DATA_KEY, categories);
+  // Async cloud save (fire and forget)
+  if (isKVConfigured()) kvFetch('SET', DATA_KEY, categories);
 };
 
 export const loadCategories = async (): Promise<Category[] | null> => {
-  // 1. Try Cloud First for latest data
-  if (isKVConfigured()) {
-    const cloudData = await kvFetch('GET', DATA_KEY);
-    if (cloudData && Array.isArray(cloudData)) {
-      // Update local cache to match cloud
-      localStorage.setItem(DATA_KEY, JSON.stringify(cloudData));
-      return cloudData;
-    }
-  }
+  // Always return local first for speed
+  const local = getFromLocal<Category[]>(DATA_KEY);
+  return local;
+};
 
-  // 2. Fallback to Local
-  try {
-    const data = localStorage.getItem(DATA_KEY);
-    return data ? JSON.parse(data) : null;
-  } catch (e) {
-    return null;
+export const syncCategoriesFromCloud = async (): Promise<Category[] | null> => {
+  if (!isKVConfigured()) return null;
+  const cloudData = await kvFetch('GET', DATA_KEY);
+  if (cloudData && Array.isArray(cloudData)) {
+      saveToLocal(DATA_KEY, cloudData);
+      return cloudData;
   }
+  return null;
 };
 
 // --- Settings ---
 
 export const saveSettings = async (settings: AppSettings) => {
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-  if (isKVConfigured()) {
-    await kvFetch('SET', SETTINGS_KEY, settings);
-  }
+  saveToLocal(SETTINGS_KEY, settings);
+  if (isKVConfigured()) kvFetch('SET', SETTINGS_KEY, settings);
 };
 
+// FAST READ: Only reads local storage. Used by AI Service to avoid race conditions.
+export const getSettingsLocal = (): AppSettings | null => {
+    return getFromLocal<AppSettings>(SETTINGS_KEY);
+};
+
+// SLOW SYNC: Used by App on init.
 export const loadSettings = async (): Promise<AppSettings | null> => {
-  if (isKVConfigured()) {
+  // Return local immediately for UI rendering if needed (handled by App.tsx state)
+  return getFromLocal<AppSettings>(SETTINGS_KEY);
+};
+
+export const syncSettingsFromCloud = async (): Promise<AppSettings | null> => {
+    if (!isKVConfigured()) return null;
     const cloudData = await kvFetch('GET', SETTINGS_KEY);
     if (cloudData) {
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify(cloudData));
-      return cloudData as AppSettings;
+        saveToLocal(SETTINGS_KEY, cloudData);
+        return cloudData as AppSettings;
     }
-  }
-
-  try {
-    const data = localStorage.getItem(SETTINGS_KEY);
-    return data ? JSON.parse(data) : null;
-  } catch (e) {
     return null;
-  }
 };
 
 // --- Search Engines ---
 
 export const saveSearchEngines = async (engines: SearchEngine[]) => {
-  localStorage.setItem(ENGINES_KEY, JSON.stringify(engines));
-  if (isKVConfigured()) {
-    await kvFetch('SET', ENGINES_KEY, engines);
-  }
+  saveToLocal(ENGINES_KEY, engines);
+  if (isKVConfigured()) kvFetch('SET', ENGINES_KEY, engines);
 };
 
 export const loadSearchEngines = async (): Promise<SearchEngine[] | null> => {
-  if (isKVConfigured()) {
+  return getFromLocal<SearchEngine[]>(ENGINES_KEY);
+};
+
+export const syncSearchEnginesFromCloud = async (): Promise<SearchEngine[] | null> => {
+    if (!isKVConfigured()) return null;
     const cloudData = await kvFetch('GET', ENGINES_KEY);
     if (cloudData && Array.isArray(cloudData)) {
-       localStorage.setItem(ENGINES_KEY, JSON.stringify(cloudData));
-       return cloudData;
+        saveToLocal(ENGINES_KEY, cloudData);
+        return cloudData;
     }
-  }
-
-  try {
-    const data = localStorage.getItem(ENGINES_KEY);
-    return data ? JSON.parse(data) : null;
-  } catch (e) {
     return null;
-  }
 };

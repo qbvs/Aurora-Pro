@@ -1,13 +1,10 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { AIResponse, LinkItem, addLog, AIProviderConfig } from "../types";
-import { loadSettings } from "./storageService";
+import { getSettingsLocal } from "./storageService"; // Use local only!
 import { INITIAL_SETTINGS } from "../constants";
 
 // --- Helpers ---
 
-// CRITICAL FIX: Vite replaces process.env.VAR statically at build time.
-// We cannot access them dynamically like process.env[key].
-// We must map them explicitly.
 const getEnvValue = (key?: string): string => {
     if (!key) return '';
     switch (key) {
@@ -21,39 +18,31 @@ const getEnvValue = (key?: string): string => {
     }
 };
 
-// Get the actual API Key (resolving Env Slots if necessary)
 const resolveApiKey = (config: AIProviderConfig): string => {
-    // 1. If "Environment Variable" mode is selected (envSlot is set)
     if (config.envSlot) {
         const val = getEnvValue(config.envSlot);
         if (val) return val;
-        // If selected slot is empty, fall through? No, explicit selection should fail or return empty.
         return ''; 
     }
-    
-    // 2. If "Manual" mode (envSlot is undefined/null), use the manually entered apiKey
     if (config.apiKey && config.apiKey.trim() !== '') {
         return config.apiKey;
     }
-
-    // 3. Fallback for default Google config only
     if (config.type === 'google') {
         return process.env.API_KEY || '';
     }
-
     return '';
 };
 
-// Get the active configuration
-const getActiveConfig = async (): Promise<AIProviderConfig> => {
-    const settings = await loadSettings();
+const getActiveConfig = (): AIProviderConfig => {
+    // Synchronous read from LocalStorage. 
+    // This ensures we get exactly what the user just saved, not stale data from cloud.
+    const settings = getSettingsLocal(); 
     const config = settings?.aiConfigs?.find(c => c.isActive) || INITIAL_SETTINGS.aiConfigs[0];
     
     const resolvedKey = resolveApiKey(config);
     return { ...config, apiKey: resolvedKey };
 };
 
-// Standardized Error Handler
 const handleAiError = (error: any, context: string): Error => {
     const errorMessage = (error as any)?.message || String(error) || 'Unknown AI Error';
     addLog('error', `AI ${context} failed: ${errorMessage}`);
@@ -65,14 +54,13 @@ const handleAiError = (error: any, context: string): Error => {
     return new Error(String(errorMessage));
 };
 
-// Helper to normalize Base URL
 const normalizeBaseUrl = (url: string): string => {
     if (!url) return '';
-    let normalized = url.trim().replace(/\/$/, ''); // Remove trailing slash
+    let normalized = url.trim().replace(/\/$/, '');
     return normalized;
 };
 
-// --- Connection Testing & Model Fetching (For UI) ---
+// --- Connection Testing & Model Fetching ---
 
 export interface TestResult {
     success: boolean;
@@ -81,13 +69,11 @@ export interface TestResult {
 
 export const testAiConnection = async (config: AIProviderConfig): Promise<TestResult> => {
     try {
-        // Use the same resolution logic as the main app
         const apiKey = resolveApiKey(config);
 
         if (!apiKey) {
-            // Detailed debugging for user
             if (config.envSlot) {
-                return { success: false, message: `环境变量 ${config.envSlot} 为空或未读取到 (请检查 Vercel 变量设置并 Redeploy)` };
+                return { success: false, message: `环境变量 ${config.envSlot} 未读取到` };
             }
             return { success: false, message: 'API Key 为空' };
         }
@@ -106,7 +92,7 @@ export const testAiConnection = async (config: AIProviderConfig): Promise<TestRe
             const modelsEndpoint = baseUrl.endsWith('/v1') ? '/models' : '/v1/models';
             const modelsUrl = `${baseUrl}${modelsEndpoint}`;
             
-            addLog('info', `Testing connection to: ${modelsUrl}`);
+            addLog('info', `Testing: ${modelsUrl} (Model: ${config.model})`);
 
             try {
                 const response = await fetch(modelsUrl, {
@@ -117,19 +103,13 @@ export const testAiConnection = async (config: AIProviderConfig): Promise<TestRe
                 if (response.ok) {
                     return { success: true, message: '连接成功 (模型列表可用)' };
                 }
-                
-                if (response.status === 401 || response.status === 403) {
-                     return { success: false, message: `鉴权失败 (${response.status}) - 请检查密钥` };
-                }
             } catch (netErr) {
-                 addLog('warn', `Model list network error: ${netErr}`);
+                 // ignore network error on models endpoint, try chat
             }
 
-            // 2. Fallback: Try a minimal chat completion
+            // 2. Fallback: Chat Completion
             const chatEndpoint = baseUrl.endsWith('/v1') ? '/chat/completions' : '/v1/chat/completions';
             const chatUrl = `${baseUrl}${chatEndpoint}`;
-
-            addLog('info', `Fallback testing chat: ${chatUrl}`);
 
             const chatRes = await fetch(chatUrl, {
                 method: 'POST',
@@ -150,10 +130,11 @@ export const testAiConnection = async (config: AIProviderConfig): Promise<TestRe
 
             const errorText = await chatRes.text();
             
-            // HTTP 400 with "model" error means Auth & Connection are GOOD, just model name is bad.
-            if (chatRes.status === 400 || (errorText.includes('model') && (errorText.includes('invalid') || errorText.includes('exist')))) {
+            // Critical: If status is 400/404 but error message is about Model, 
+            // it means Auth is GOOD. Return success (Green) but with warning.
+            if (chatRes.status === 400 || chatRes.status === 404 || errorText.includes('model')) {
                  addLog('warn', `Connection OK but Model Invalid: ${errorText}`);
-                 return { success: true, message: '连接成功 (注意：当前模型名无效)' };
+                 return { success: true, message: '连接通畅，但模型名称无效 (请核对模型名)' };
             }
 
             if (chatRes.status === 401 || chatRes.status === 403) {
@@ -164,7 +145,7 @@ export const testAiConnection = async (config: AIProviderConfig): Promise<TestRe
         }
     } catch (e) {
         const msg = (e as any).message || String(e);
-        addLog('error', `Connection Test Failed: ${msg}`);
+        addLog('error', `Test Failed: ${msg}`);
         return { success: false, message: '连接失败' };
     }
 };
@@ -181,27 +162,20 @@ export const fetchAiModels = async (config: AIProviderConfig): Promise<string[]>
             const endpoint = baseUrl.endsWith('/v1') ? '/models' : '/v1/models';
             const url = `${baseUrl}${endpoint}`;
             
-            addLog('info', `Fetching models from: ${url}`);
-
             const response = await fetch(url, {
                 method: 'GET',
                 headers: { 'Authorization': `Bearer ${apiKey}` }
             });
 
-            if (!response.ok) {
-                addLog('warn', `Fetch models failed: ${response.status}`);
-                return [];
-            }
+            if (!response.ok) return [];
             
             const data = await response.json();
-            // OpenAI format: { data: [{ id: '...' }, ...] }
             if (data && Array.isArray(data.data)) {
                 return data.data.map((m: any) => m.id);
             }
             return [];
         }
     } catch (e) {
-        addLog('warn', `Fetch Models Exception: ${e}`);
         return [];
     }
 };
@@ -209,22 +183,16 @@ export const fetchAiModels = async (config: AIProviderConfig): Promise<string[]>
 // --- Core Functionality ---
 
 export const analyzeUrl = async (url: string): Promise<AIResponse> => {
-  addLog('info', `AI Analyzing URL: ${url}`);
-  const config = await getActiveConfig();
-  
+  const config = getActiveConfig(); // Sync
   if (!config.apiKey) throw new Error("API Key not configured");
+
+  addLog('info', `Analyzing ${url} using ${config.model}`);
 
   const promptText = `
     Analyze the following URL: ${url}.
     I need you to act as a web scraper and metadata extractor.
-    
-    1. Provide the likely website Title.
-    2. Provide a short Description (in Chinese, max 10 words).
-    3. Provide a hex color code that represents the brand.
-    4. If this URL looks like a Search Engine, provide the "searchUrlPattern" (e.g., https://google.com/search?q=).
-
     Return JSON ONLY. Format:
-    { "title": "...", "description": "...", "brandColor": "...", "searchUrlPattern": "..." }
+    { "title": "...", "description": "max 10 words Chinese", "brandColor": "#hex", "searchUrlPattern": "..." }
   `;
 
   try {
@@ -264,7 +232,7 @@ export const analyzeUrl = async (url: string): Promise<AIResponse> => {
             body: JSON.stringify({
                 model: config.model,
                 messages: [
-                    { role: "system", content: "You are a JSON-only response bot. You must strictly output valid JSON." },
+                    { role: "system", content: "You are a JSON-only response bot. Output valid JSON." },
                     { role: "user", content: promptText }
                 ],
                 response_format: { type: "json_object" } 
@@ -278,8 +246,6 @@ export const analyzeUrl = async (url: string): Promise<AIResponse> => {
 
         const data = await res.json();
         const content = data.choices?.[0]?.message?.content;
-        if (!content) throw new Error("Empty response from API");
-        
         return JSON.parse(content) as AIResponse;
     }
 
@@ -289,20 +255,15 @@ export const analyzeUrl = async (url: string): Promise<AIResponse> => {
 };
 
 export const generateCategoryLinks = async (categoryTitle: string, count: number): Promise<Partial<LinkItem>[]> => {
-  addLog('info', `AI Generating links for category: ${categoryTitle}`);
-  const config = await getActiveConfig();
+  const config = getActiveConfig();
   if (!config.apiKey) return [];
+  
+  addLog('info', `Generating links for ${categoryTitle} using ${config.model}`);
 
   const promptText = `
-      Generate ${count} popular, high-quality, and useful website links for the category "${categoryTitle}".
-      For each website, provide:
-      1. Title (Name of the site)
-      2. URL (Full https address)
-      3. Description (Short Chinese description, max 10 words)
-      4. Brand Color (Hex code)
-
-      Return JSON ONLY. Format:
-      [ { "title": "...", "url": "...", "description": "...", "color": "..." }, ... ]
+      Generate ${count} website links for category "${categoryTitle}".
+      Return JSON ONLY array. Format:
+      [ { "title": "...", "url": "...", "description": "max 10 words Chinese", "color": "#hex" }, ... ]
   `;
 
   try {
@@ -330,9 +291,7 @@ export const generateCategoryLinks = async (categoryTitle: string, count: number
         });
         const text = response.text;
         if (!text) return [];
-        const result = JSON.parse(text);
-        addLog('info', `AI generated ${result.length} links`);
-        return result;
+        return JSON.parse(text);
 
     } else {
         const baseUrl = normalizeBaseUrl(config.baseUrl);
@@ -347,7 +306,7 @@ export const generateCategoryLinks = async (categoryTitle: string, count: number
             body: JSON.stringify({
                 model: config.model,
                 messages: [
-                    { role: "system", content: "You are a JSON-only response bot. You must strictly output valid JSON array." },
+                    { role: "system", content: "You are a JSON-only response bot. Output valid JSON array." },
                     { role: "user", content: promptText }
                 ]
             })
@@ -366,16 +325,10 @@ export const generateCategoryLinks = async (categoryTitle: string, count: number
 };
 
 export const getAiGreeting = async (): Promise<string> => {
-  const config = await getActiveConfig();
+  const config = getActiveConfig();
   if (!config.apiKey) return "";
   
-  const promptText = `
-      Generate a short, inspiring, and positive greeting or quote specifically for a developer, designer, or creator.
-      The language MUST be Simplified Chinese.
-      The length must be under 20 words.
-      Do not include quotation marks or author names, just the text.
-      Tone: Encouraging, elegant, or witty.
-  `;
+  const promptText = `Generate a 15-word inspiring Chinese greeting for a developer. No quotes.`;
 
   try {
      if (config.type === 'google') {
@@ -405,21 +358,14 @@ export const getAiGreeting = async (): Promise<string> => {
         return data.choices?.[0]?.message?.content?.trim() || "";
      }
   } catch (e) {
-    addLog('warn', `AI Greeting failed: ${e}`);
     return "";
   }
 };
 
 export const suggestIcon = async (text: string): Promise<string> => {
-  const config = await getActiveConfig();
+  const config = getActiveConfig();
   if (!config.apiKey) return "Sparkles";
-
-  const promptText = `
-      Suggest ONE single Lucide React icon name that best represents the text: "${text}".
-      Return ONLY the icon name string (e.g. "Home", "Code", "Zap", "Folder").
-      Do not explain.
-  `;
-
+  const promptText = `Suggest one Lucide React icon name for "${text}". Return string only.`;
   try {
     let result = "Sparkles";
     if (config.type === 'google') {
@@ -432,7 +378,6 @@ export const suggestIcon = async (text: string): Promise<string> => {
     } else {
         const baseUrl = normalizeBaseUrl(config.baseUrl);
         const endpoint = baseUrl.endsWith('/v1') ? '/chat/completions' : '/v1/chat/completions';
-
         const res = await fetch(`${baseUrl}${endpoint}`, {
             method: 'POST',
             headers: {
@@ -447,11 +392,8 @@ export const suggestIcon = async (text: string): Promise<string> => {
         const data = await res.json();
         result = data.choices?.[0]?.message?.content || "";
     }
-    
     return result.trim().replace(/['"`]/g, '').split(' ')[0] || "Sparkles";
-
   } catch (e) {
-    addLog('warn', `Icon suggestion failed: ${e}`);
     return "Sparkles";
   }
 };
