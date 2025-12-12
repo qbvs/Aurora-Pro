@@ -58,21 +58,23 @@
 
 ---
 
-## 🚀 部署到 Vercel (5分钟完成)
+## 🚀 Vercel 部署完全指南 (保姆级教程)
 
-按照以下三步，即可拥有完全属于您的 Aurora Pro 导航站。
+只需四步，即可拥有一个功能完整的私有 AI 导航站。
 
 ### 前置准备
-1.  **一个 GitHub 账户**。
-2.  **一个 Vercel 账户**，并已关联您的 GitHub。
-3.  **一个 Google Gemini API Key**。
+1.  一个 **GitHub** 账户。
+2.  一个 **Vercel** 账户，并已关联您的 GitHub。
+3.  一个 **Google Gemini API Key**。
     - 前往 [Google AI Studio](https://aistudio.google.com/app/apikey) 创建并复制您的密钥。
     - **强烈建议**: 前往 [Google Cloud Billing](https://console.cloud.google.com/billing) 为您的项目启用结算，以获取近乎无限的 API 调用额度，避免免费额度用尽。
 
-### 第一步：一键部署 & 配置环境变量
+---
 
-1.  点击页面顶部的 **"Deploy with Vercel"** 按钮。
-2.  Vercel 将引导您创建一个新的代码仓库 (Repository)，请随意命名。
+### ✅ 第一步：一键部署项目
+
+1.  点击页面顶部的 **"Deploy with Vercel"** 蓝色按钮。
+2.  Vercel 将引导您创建一个新的代码仓库 (Repository)，请随意命名（例如 `my-aurora-pro`）。
 3.  在 "Configure Project" 页面，展开 **Environment Variables** (环境变量) 部分，填入以下两项：
 
 | 变量名          | 必填 | 描述                                       |
@@ -80,34 +82,66 @@
 | `API_KEY`       |  ✅  | 您在上一步获取的 Google Gemini API 密钥。      |
 | `ADMIN_PASSWORD`|  ✅  | 用于登录管理面板的**自定义密码**，请务必设置。 |
 
-4.  点击 **Deploy**，等待 Vercel 完成首次构建和部署。
+4.  点击 **Deploy**，等待约 1 分钟，Vercel 会完成首次构建和部署。
 
-### 第二步：连接云存储 (Vercel KV) - **关键步骤**
+---
 
-为了让您的数据能在云端同步，此步骤**至关重要**。
+### ✅ 第二步：创建并连接云数据库 (Vercel KV) - **关键步骤**
 
-1.  项目部署成功后，您会自动进入 Vercel 的项目控制台。
-2.  在顶部导航栏中找到并点击 **Storage** (存储)。
-3.  在 "Marketplace Database Providers" 列表中，找到 **Upstash** (Serverless DB (Redis, ...))，点击其右侧的 **`>`** 箭头。
-4.  在弹出的下拉框中，选择 **`Upstash for Redis`**，然后点击 **Create**。
-5.  在 "Create Database" 页面，**无需修改任何设置**，直接滚动到底部，点击黑色的 **Create** 按钮。
-6.  **最重要的一步**: 在接下来的 "Connect to Project" 页面，确保您的 Aurora Pro 项目被选中，然后点击蓝色的 **Connect** 按钮。
-    -   此操作会自动将 `KV_REST_API_URL` 和 `KV_REST_API_TOKEN` 等变量添加到您的项目中。**您无需手动操作**。
+为了让您的导航数据能够在所有设备间同步，此步骤**至关重要**。我们将引导您完成每一个点击。
 
-### 第三步：重新部署以应用更改 - 必须操作!
+1.  **进入 Storage 页面**
+    -   项目部署成功后，您会自动进入 Vercel 的项目控制台。在顶部导航栏中找到并点击 **Storage** 标签页。
+    <br/><br/>
+    <img src="https://raw.githubusercontent.com/Mar-ct/Aurora-pro/main/assets/guide-1.png" width="600" alt="Vercel Storage Tab"/>
+    <br/><br/>
 
-Vercel 不会自动将新连接的 KV 环境变量应用到旧的部署中。您**必须**手动触发一次 **Redeploy** (重新部署)。
+2.  **选择 KV 数据库**
+    -   在 Storage 页面，您会看到 Vercel 提供的几种存储选项。请找到 **KV (Durable Redis)** 这一项，并点击它右侧的 **`Connect Store`** 按钮。
+    <br/><br/>
+    <img src="https://raw.githubusercontent.com/Mar-ct/Aurora-pro/main/assets/guide-2.png" width="600" alt="Select KV Store"/>
+    <br/><br/>
+
+3.  **创建数据库**
+    -   在弹出的创建窗口中，您**无需修改任何内容**。Vercel 已经为您自动生成了数据库名称并选择了免费套餐。
+    -   直接点击右下角黑色的 **`Create`** 按钮。
+    <br/><br/>
+    <img src="https://raw.githubusercontent.com/Mar-ct/Aurora-pro/main/assets/guide-3.png" width="600" alt="Create Database"/>
+    <br/><br/>
+
+4.  **连接到项目 (最关键！)**
+    -   创建成功后，Vercel 会立即显示一个 **"Connect to Project"** 的界面。
+    -   在这个界面，请**确保**您的 `aurora-pro` (或您自定义的仓库名) 项目被选中。
+    -   然后点击蓝色的 **`Connect`** 按钮。
+    <br/><br/>
+    <img src="https://raw.githubusercontent.com/Mar-ct/Aurora-pro/main/assets/guide-4.png" width="600" alt="Connect Project"/>
+    <br/><br/>
+
+5.  **自动配置完成**
+    -   恭喜！Vercel 已经自动将云同步所需的所有环境变量 (`KV_REST_API_URL` 等) 添加到了您的项目中。**您无需手动进行任何复制粘贴**。
+
+---
+
+### ✅ 第三步：重新部署以应用更改 - 必须操作!
+
+Vercel 不会自动将新连接的数据库密钥应用到旧的部署中。您**必须**手动触发一次 **Redeploy** (重新部署)，让新设置生效。
 
 1.  回到项目的 **Deployments** (部署) 标签页。
 2.  找到最新的一条部署记录 (通常在最顶部)。
 3.  点击其右侧的 **`...`** 菜单。
 4.  选择 **Redeploy**。
+    <br/><br/>
+    <img src="https://raw.githubusercontent.com/Mar-ct/Aurora-pro/main/assets/guide-5.png" width="400" alt="Redeploy Menu"/>
+    <br/><br/>
 5.  在弹出的确认框中，**不要勾选** "Use existing Build Cache"，然后点击黑色的 **Redeploy** 按钮。
+    > 这一步会强制 Vercel 使用包含数据库密钥的最新设置来**重新构建**您的应用。
 
-> 这一步会强制 Vercel 使用包含数据库密钥的最新设置来**重新构建**您的应用。
+---
 
-### 第四步：完成！
-等待重新部署完成后，访问您的网站 URL。点击“管理面板”，输入您设置的密码，侧边栏底部应显示 **🟢 已连接 Vercel KV** 的绿色状态。恭喜，您的 AI 导航站已完美配置！
+### ✅ 第四步：大功告成！
+等待这次重新部署完成后 (状态变为 `Ready`)，访问您的网站 URL。点击“管理面板”，输入您设置的密码，侧边栏底部应显示 **🟢 已连接 Vercel KV** 的绿色状态。
+
+恭喜，您的 AI 导航站已完美配置！
 
 ---
 
