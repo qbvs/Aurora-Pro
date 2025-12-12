@@ -254,14 +254,20 @@ export const analyzeUrl = async (url: string): Promise<AIResponse> => {
   }
 };
 
-export const generateCategoryLinks = async (categoryTitle: string, count: number): Promise<Partial<LinkItem>[]> => {
+export const generateCategoryLinks = async (categoryTitle: string, count: number, existingUrls: string[] = []): Promise<Partial<LinkItem>[]> => {
   const config = getActiveConfig();
   if (!config.apiKey) return [];
   
-  addLog('info', `Generating links for ${categoryTitle} using ${config.model}`);
+  addLog('info', `Generating links for ${categoryTitle} using ${config.model}. Exclude count: ${existingUrls.length}`);
+
+  // Create an exclusion string. Limit to 50 URLs to prevent hitting token limits if the user has a massive library.
+  const excludeText = existingUrls.length > 0 
+    ? `IMPORTANT: Do NOT include the following websites or URLs: ${existingUrls.slice(0, 50).join(', ')}. Provide fresh suggestions only.` 
+    : '';
 
   const promptText = `
-      Generate ${count} website links for category "${categoryTitle}".
+      Generate ${count} POPULAR and HIGH-QUALITY website links for category "${categoryTitle}".
+      ${excludeText}
       Return JSON ONLY array. Format:
       [ { "title": "...", "url": "...", "description": "max 10 words Chinese", "color": "#hex" }, ... ]
   `;

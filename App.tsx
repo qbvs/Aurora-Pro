@@ -415,21 +415,64 @@ const App: React.FC = () => {
     if (!showGenLinksModal) return;
     setIsGeneratingLinks(true);
     try {
-      const newLinksData = await generateCategoryLinks(showGenLinksModal.title, genCount);
+      // 1. Gather existing URLs to exclude
+      const targetCategory = categories.find(c => c.id === showGenLinksModal.catId);
+      const existingLinks = targetCategory ? targetCategory.links : [];
+      const existingUrls = existingLinks.map(l => l.url);
+      const existingTitles = new Set(existingLinks.map(l => l.title.toLowerCase().trim()));
+      const existingDomains = new Set(existingLinks.map(l => {
+          try { return new URL(l.url).hostname.replace('www.', ''); } catch { return ''; }
+      }));
+
+      // 2. Call AI with exclusion list
+      const newLinksData = await generateCategoryLinks(showGenLinksModal.title, genCount, existingUrls);
+      
       if (!newLinksData || newLinksData.length === 0) {
         alert("AI 生成未能返回结果。请转到「全局设置 -> 系统诊断」查看错误日志。");
         return;
       }
-      const newLinks: LinkItem[] = newLinksData.map((l, i) => ({
-        id: `gen-${Date.now()}-${i}`,
-        title: l.title || 'Unknown',
-        url: l.url || '#',
-        description: l.description || '',
-        color: l.color || '#666'
-      }));
+
+      // 3. Client-side Deduplication (Safety Net)
+      // Filter out links that match existing titles or domains, just in case AI ignored the prompt.
+      const uniqueNewLinks: LinkItem[] = [];
+      
+      for (const l of newLinksData) {
+          if (!l.url || !l.title) continue;
+          
+          const newTitleLower = l.title.toLowerCase().trim();
+          let newDomain = '';
+          try { newDomain = new URL(l.url).hostname.replace('www.', ''); } catch { }
+
+          // Check if Title matches exactly
+          if (existingTitles.has(newTitleLower)) continue;
+          
+          // Check if Domain matches existing domains
+          if (newDomain && existingDomains.has(newDomain)) continue;
+          
+          // Also check against other NEW links we just added in this loop (prevent AI returning duplicates in same batch)
+          const isDuplicateInBatch = uniqueNewLinks.some(ul => 
+              ul.title.toLowerCase().trim() === newTitleLower || 
+              (newDomain && ul.url.includes(newDomain))
+          );
+          if (isDuplicateInBatch) continue;
+
+          uniqueNewLinks.push({
+            id: `gen-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+            title: l.title,
+            url: l.url,
+            description: l.description || '',
+            color: l.color || '#666'
+          });
+      }
+
+      if (uniqueNewLinks.length === 0) {
+          alert("AI 生成了链接，但似乎都是重复的。请尝试更改分类名称或稍后再试。");
+          return;
+      }
+
       const newCats = categories.map(cat => {
         if (cat.id !== showGenLinksModal.catId) return cat;
-        return { ...cat, links: [...cat.links, ...newLinks] };
+        return { ...cat, links: [...cat.links, ...uniqueNewLinks] };
       });
       setCategories(newCats);
       await saveCategories(newCats);
