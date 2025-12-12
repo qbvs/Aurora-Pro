@@ -1,0 +1,1149 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import { 
+  Settings, Plus, Search, Moon, Sun, LayoutGrid, 
+  LogOut, LogIn, Edit3, Trash2, X, Check, Wand2, Globe, MonitorPlay, Lock, AlertCircle, RefreshCw,
+  Image as ImageIcon, Upload, Palette, Layers, Type as TypeIcon, Clock
+} from 'lucide-react';
+import { Category, LinkItem, AppSettings, SearchEngine } from './types';
+import { INITIAL_DATA, INITIAL_SETTINGS, INITIAL_SEARCH_ENGINES } from './constants';
+import { 
+  loadCategories, saveCategories, loadSettings, saveSettings, 
+  loadSearchEngines, saveSearchEngines, isKVConfigured
+} from './services/storageService';
+import { analyzeUrl, generateCategoryLinks, getAiGreeting, suggestIcon } from './services/geminiService';
+import { Icon } from './components/Icon';
+
+// --- Helper Components ---
+
+const Modal: React.FC<{ title: string; onClose: () => void; children: React.ReactNode }> = ({ title, onClose, children }) => (
+  <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-fade-in">
+    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-2xl border border-white/20 dark:border-white/5 overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="p-6 border-b border-gray-100 dark:border-white/5 flex justify-between items-center bg-white/50 dark:bg-slate-800/50">
+        <div className="flex items-center gap-2 text-violet-600 dark:text-violet-400">
+          <Settings size={20} />
+          <h2 className="text-xl font-bold text-gray-800 dark:text-white">{title}</h2>
+        </div>
+        <button onClick={onClose} className="p-2 hover:bg-gray-100 dark:hover:bg-white/10 rounded-full transition-colors">
+          <X size={20} className="text-gray-500" />
+        </button>
+      </div>
+      <div className="p-0 overflow-y-auto flex-1">
+        {children}
+      </div>
+    </div>
+  </div>
+);
+
+const Favicon = ({ url, size = 32, className }: { url: string, size?: number, className?: string }) => {
+  try {
+    return (
+      <img 
+        src={`https://s2.googleusercontent.com/s2/favicons?domain_url=${url}&sz=${size * 2}`}
+        alt="icon" 
+        className={`bg-white rounded-full ${className}`}
+        style={{ width: size, height: size }}
+        onError={(e) => { (e.target as HTMLImageElement).src = 'https://picsum.photos/32/32'; }}
+      />
+    );
+  } catch {
+    return <div style={{ width: size, height: size }} className={`bg-gray-200 rounded-full ${className}`} />;
+  }
+};
+
+// --- Main App Component ---
+
+const App: React.FC = () => {
+  // -- State --
+  const [categories, setCategories] = useState<Category[]>(INITIAL_DATA);
+  const [settings, setLocalSettings] = useState<AppSettings>(INITIAL_SETTINGS);
+  const [searchEngines, setSearchEngines] = useState<SearchEngine[]>(INITIAL_SEARCH_ENGINES);
+  
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [passwordInput, setPasswordInput] = useState('');
+  const [loginError, setLoginError] = useState('');
+
+  const [searchTerm, setSearchTerm] = useState('');
+  const [currentTime, setCurrentTime] = useState<string>('');
+  const [aiGreeting, setAiGreeting] = useState<string>('');
+  const [clock, setClock] = useState(new Date()); // State for Clock
+  
+  // Modals
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [editingLink, setEditingLink] = useState<{ catId: string, link?: LinkItem } | null>(null);
+  
+  // Custom Confirm Modal State
+  const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean; message: string; onConfirm: () => void } | null>(null);
+
+  // Link Editor State
+  const [linkForm, setLinkForm] = useState<Partial<LinkItem>>({});
+  
+  // Search Engine Editor State
+  const [engineForm, setEngineForm] = useState<Partial<SearchEngine>>({});
+  const [isAddingEngine, setIsAddingEngine] = useState(false);
+
+  // Settings Tab State
+  const [activeSettingsTab, setActiveSettingsTab] = useState<'general' | 'appearance' | 'search'>('general');
+
+  // AI Generation State
+  const [isAiLoading, setIsAiLoading] = useState(false);
+  const [showGenLinksModal, setShowGenLinksModal] = useState<{catId: string, title: string} | null>(null);
+  const [genCount, setGenCount] = useState(4);
+  const [isGeneratingLinks, setIsGeneratingLinks] = useState(false);
+
+  // Category Edit State
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
+
+  // -- Effects --
+
+  // Load Data
+  useEffect(() => {
+    const savedData = loadCategories();
+    if (savedData) setCategories(savedData);
+    
+    const savedSettings = loadSettings();
+    if (savedSettings) setLocalSettings(savedSettings);
+
+    const savedEngines = loadSearchEngines();
+    if (savedEngines) setSearchEngines(savedEngines);
+
+    // Initial greeting time
+    const updateTime = () => {
+      const hours = new Date().getHours();
+      if (hours < 12) setCurrentTime('早上好');
+      else if (hours < 18) setCurrentTime('下午好');
+      else setCurrentTime('晚上好');
+    };
+    updateTime();
+  }, []);
+
+  // Clock Timer
+  useEffect(() => {
+    const timer = setInterval(() => setClock(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Fetch AI Greeting
+  useEffect(() => {
+    const fetchGreeting = async () => {
+        if (!settings.enableAiGreeting) return;
+        
+        // Cache greeting for 4 hours
+        const CACHE_KEY = 'aurora_greeting_cache';
+        const cached = localStorage.getItem(CACHE_KEY);
+        if (cached) {
+            const { text, expiry } = JSON.parse(cached);
+            if (Date.now() < expiry) {
+                setAiGreeting(text);
+                return;
+            }
+        }
+
+        const text = await getAiGreeting();
+        if (text) {
+            setAiGreeting(text);
+            localStorage.setItem(CACHE_KEY, JSON.stringify({
+                text,
+                expiry: Date.now() + 4 * 60 * 60 * 1000 
+            }));
+        }
+    };
+    fetchGreeting();
+  }, [settings.enableAiGreeting]);
+
+  // Dark Mode Application
+  useEffect(() => {
+    const root = window.document.documentElement;
+    if (settings.theme === 'dark' || (settings.theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      root.classList.add('dark');
+    } else {
+      root.classList.remove('dark');
+    }
+  }, [settings.theme]);
+
+  // -- Derived State --
+  const activeSearchEngine = searchEngines.find(e => e.id === settings.activeSearchEngineId) || searchEngines[0];
+  const kvStatus = isKVConfigured();
+  const totalLinks = categories.reduce((acc, cat) => acc + cat.links.length, 0);
+
+  // -- Handlers --
+
+  const handleAdminAccess = () => {
+    if (isAuthenticated) {
+      toggleEditMode();
+    } else {
+      setShowLoginModal(true);
+    }
+  };
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    const validPassword = process.env.ADMIN_PASSWORD;
+    
+    if (!validPassword) {
+       setIsAuthenticated(true);
+       setShowLoginModal(false);
+       toggleEditMode();
+       return;
+    }
+
+    if (passwordInput === validPassword) {
+      setIsAuthenticated(true);
+      setShowLoginModal(false);
+      toggleEditMode();
+      setLoginError('');
+      setPasswordInput('');
+    } else {
+      setLoginError('密码错误，请重试');
+    }
+  };
+
+  const toggleEditMode = () => setIsEditMode(!isEditMode);
+
+  // Category Management
+  const handleCategoryNameChange = (id: string, newTitle: string) => {
+    const newCats = categories.map(cat => cat.id === id ? { ...cat, title: newTitle } : cat);
+    setCategories(newCats);
+  };
+
+  const handleCategoryNameBlur = async (id: string, title: string) => {
+    setEditingCategoryId(null);
+    // Save locally
+    saveCategories(categories);
+    
+    // AI Icon Generation
+    try {
+        const icon = await suggestIcon(title);
+        const newCats = categories.map(cat => cat.id === id ? { ...cat, icon: icon } : cat);
+        setCategories(newCats);
+        saveCategories(newCats);
+    } catch (e) {
+        console.error("Failed to generate icon", e);
+    }
+  };
+
+  const handleDeleteLink = (catId: string, linkId: string) => {
+    setConfirmModal({
+        isOpen: true,
+        message: '确定要删除这个链接吗？操作无法撤销。',
+        onConfirm: () => {
+            const newCats = categories.map(cat => {
+            if (cat.id !== catId) return cat;
+            return { ...cat, links: cat.links.filter(l => l.id !== linkId) };
+            });
+            setCategories(newCats);
+            saveCategories(newCats);
+            setConfirmModal(null);
+        }
+    });
+  };
+
+  const handleSaveLink = () => {
+    if (!editingLink || !linkForm.title || !linkForm.url) return;
+    
+    const newLink: LinkItem = {
+      id: linkForm.id || `l-${Date.now()}`,
+      title: linkForm.title,
+      url: linkForm.url.startsWith('http') ? linkForm.url : `https://${linkForm.url}`,
+      description: linkForm.description || '',
+      color: linkForm.color || '#666'
+    };
+
+    const newCats = categories.map(cat => {
+      if (cat.id !== editingLink.catId) return cat;
+      if (editingLink.link) {
+        return { ...cat, links: cat.links.map(l => l.id === editingLink.link!.id ? newLink : l) };
+      } else {
+        return { ...cat, links: [...cat.links, newLink] };
+      }
+    });
+
+    setCategories(newCats);
+    saveCategories(newCats);
+    setEditingLink(null);
+    setLinkForm({});
+  };
+
+  const handleAiFillLink = async () => {
+    if (!linkForm.url) return alert('请先输入 URL');
+    setIsAiLoading(true);
+    try {
+      const data = await analyzeUrl(linkForm.url);
+      setLinkForm(prev => ({
+        ...prev,
+        title: data.title,
+        description: data.description,
+        color: data.brandColor
+      }));
+    } catch (e) {
+      console.error(e);
+      alert('AI 识别失败，请检查网络或 API Key');
+    } finally {
+      setIsAiLoading(false);
+    }
+  };
+
+  const handleGenerateCategoryLinks = async () => {
+    if (!showGenLinksModal) return;
+    setIsGeneratingLinks(true);
+    try {
+      const newLinksData = await generateCategoryLinks(showGenLinksModal.title, genCount);
+      
+      const newLinks: LinkItem[] = newLinksData.map((l, i) => ({
+        id: `gen-${Date.now()}-${i}`,
+        title: l.title || 'Unknown',
+        url: l.url || '#',
+        description: l.description || '',
+        color: l.color || '#666'
+      }));
+
+      const newCats = categories.map(cat => {
+        if (cat.id !== showGenLinksModal.catId) return cat;
+        return { ...cat, links: [...cat.links, ...newLinks] };
+      });
+
+      setCategories(newCats);
+      saveCategories(newCats);
+      setShowGenLinksModal(null);
+    } catch (e) {
+      console.error(e);
+      alert('AI 生成失败，请检查配置');
+    } finally {
+      setIsGeneratingLinks(false);
+    }
+  };
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!searchTerm) return;
+    const url = activeSearchEngine.searchUrlPattern + encodeURIComponent(searchTerm);
+    window.open(url, '_blank');
+  };
+
+  const handleSaveEngine = () => {
+    if (!engineForm.name || !engineForm.searchUrlPattern) return;
+    
+    const newEngine: SearchEngine = {
+        id: `se-${Date.now()}`,
+        name: engineForm.name,
+        baseUrl: engineForm.baseUrl || 'https://google.com',
+        searchUrlPattern: engineForm.searchUrlPattern
+    };
+
+    const newEngines = [...searchEngines, newEngine];
+    setSearchEngines(newEngines);
+    saveSearchEngines(newEngines);
+    setIsAddingEngine(false);
+    setEngineForm({});
+  };
+
+  const handleDeleteEngine = (id: string) => {
+      if (searchEngines.length <= 1) {
+          alert("至少保留一个搜索引擎");
+          return;
+      }
+      const doDelete = () => {
+        const newEngines = searchEngines.filter(e => e.id !== id);
+        setSearchEngines(newEngines);
+        saveSearchEngines(newEngines);
+        if (settings.activeSearchEngineId === id) {
+            const newActive = newEngines[0].id;
+            setLocalSettings({...settings, activeSearchEngineId: newActive});
+            saveSettings({...settings, activeSearchEngineId: newActive});
+        }
+        setConfirmModal(null);
+      };
+
+      setConfirmModal({
+          isOpen: true,
+          message: "确定删除这个搜索引擎吗？",
+          onConfirm: doDelete
+      });
+  };
+
+  const handleAiFillEngine = async () => {
+      if (!engineForm.baseUrl) return alert('请先输入搜索引擎主页 URL');
+      setIsAiLoading(true);
+      try {
+          const data = await analyzeUrl(engineForm.baseUrl);
+          setEngineForm(prev => ({
+              ...prev,
+              name: data.title,
+              searchUrlPattern: data.searchUrlPattern || ''
+          }));
+          if (!data.searchUrlPattern) {
+              alert('AI 未能自动识别搜索串，请手动填写 (例如: https://.../search?q=)');
+          }
+      } catch (e) {
+          console.error(e);
+      } finally {
+          setIsAiLoading(false);
+      }
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+        if (file.size > 2 * 1024 * 1024) {
+            alert('图片大小不能超过 2MB');
+            return;
+        }
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            const base64 = reader.result as string;
+            setLocalSettings({...settings, customBackgroundImage: base64});
+            saveSettings({...settings, customBackgroundImage: base64});
+        };
+        reader.readAsDataURL(file);
+    }
+  };
+
+  const handleGenerateAppIcon = async () => {
+      setIsAiLoading(true);
+      try {
+          const icon = await suggestIcon(settings.appName);
+          setLocalSettings({...settings, appIcon: icon});
+          saveSettings({...settings, appIcon: icon});
+      } catch (e) {
+          alert("图标生成失败");
+      } finally {
+          setIsAiLoading(false);
+      }
+  };
+
+  return (
+    <div className="min-h-screen flex text-gray-900 dark:text-gray-100 transition-colors duration-300 relative">
+      
+      {/* Background System */}
+      <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
+         {settings.backgroundMode === 'aurora' && (
+             <>
+                <div className="absolute top-0 right-0 -mr-20 -mt-20 w-96 h-96 bg-purple-500/20 rounded-full blur-3xl animate-pulse" />
+                <div className="absolute bottom-0 left-0 -ml-20 -mb-20 w-80 h-80 bg-blue-500/20 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-gradient-to-b from-white/0 to-white/50 dark:from-slate-900/0 dark:to-slate-900/50" />
+             </>
+         )}
+         {settings.backgroundMode === 'monotone' && (
+             <div className="w-full h-full bg-gray-50 dark:bg-slate-950 transition-colors duration-500" />
+         )}
+         {settings.backgroundMode === 'custom' && settings.customBackgroundImage && (
+             <div 
+               className="w-full h-full bg-cover bg-center transition-all duration-500"
+               style={{ backgroundImage: `url(${settings.customBackgroundImage})` }}
+             >
+                <div className="absolute inset-0 bg-white/30 dark:bg-black/40 backdrop-blur-sm" />
+             </div>
+         )}
+      </div>
+
+      {/* Sidebar - Edit/Admin Mode */}
+      {isEditMode && (
+        <aside className="w-64 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border-r border-gray-200 dark:border-white/5 flex flex-col transition-all z-20 sticky top-0 h-screen">
+          <div className="p-6">
+            <div className="flex items-center gap-3 mb-8">
+              <div className="w-10 h-10 bg-violet-600 rounded-xl flex items-center justify-center text-white font-bold shadow-lg shadow-violet-600/20">
+                <Icon name={settings.appIcon} size={24} />
+              </div>
+              <span className="font-bold text-lg dark:text-white truncate">{settings.appName}</span>
+            </div>
+
+            <div className="space-y-1">
+              <div className="px-4 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">控制台</div>
+              <button 
+                onClick={() => setShowSettingsModal(true)}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-gray-600 dark:text-gray-300 hover:bg-violet-50 dark:hover:bg-violet-900/20 hover:text-violet-600 transition-colors"
+              >
+                <Settings size={18} />
+                全局设置
+              </button>
+              <button 
+                 onClick={() => {
+                   const newId = `cat-${Date.now()}`;
+                   const newCat: Category = { id: newId, title: '新分类', icon: 'Folder', links: [] };
+                   setCategories([...categories, newCat]);
+                 }}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-gray-600 dark:text-gray-300 hover:bg-violet-50 dark:hover:bg-violet-900/20 hover:text-violet-600 transition-colors"
+              >
+                <Plus size={18} />
+                新建分类
+              </button>
+            </div>
+          </div>
+          
+          <div className="mt-auto p-6">
+            <div className={`p-4 rounded-xl border flex items-center gap-2 mb-4 text-sm font-medium transition-colors ${kvStatus ? 'bg-green-50 dark:bg-green-900/20 border-green-100 dark:border-green-800 text-green-700 dark:text-green-400' : 'bg-red-50 dark:bg-red-900/20 border-red-100 dark:border-red-800 text-red-700 dark:text-red-400'}`}>
+              <div className={`w-2 h-2 rounded-full ${kvStatus ? 'bg-green-500' : 'bg-red-500'} animate-pulse`} />
+              {kvStatus ? '已连接 Vercel KV' : '未连接云同步'}
+            </div>
+            <button 
+              onClick={() => {
+                toggleEditMode();
+                setIsAuthenticated(false);
+              }}
+              className="w-full py-3 rounded-xl bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-300 font-medium hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400 transition-colors flex items-center justify-center gap-2"
+            >
+              <LogOut size={16} /> 退出管理
+            </button>
+          </div>
+        </aside>
+      )}
+
+      {/* Main Content */}
+      <main className="flex-1 p-4 md:p-8 lg:p-12 relative overflow-x-hidden">
+        <div className="max-w-7xl mx-auto space-y-12">
+          
+          {/* Header Area */}
+          <div className="flex justify-between items-center relative z-10">
+            {!isEditMode && (
+               <div className="flex items-center gap-3">
+                 <div className="w-10 h-10 bg-violet-600 rounded-xl flex items-center justify-center text-white font-bold shadow-lg">
+                    <Icon name={settings.appIcon} size={24} />
+                 </div>
+                 <h1 className="font-bold text-xl text-gray-800 dark:text-white">{settings.appName}</h1>
+               </div>
+            )}
+            <div className="flex-1" /> {/* Spacer */}
+            
+            <div className="flex items-center gap-3">
+                {/* Theme Toggle - Visible Always */}
+                <button 
+                    onClick={() => setLocalSettings(s => ({...s, theme: s.theme === 'dark' ? 'light' : 'dark'}))} 
+                    className="p-2.5 rounded-full bg-white dark:bg-slate-800 text-gray-600 dark:text-gray-300 shadow-sm border border-gray-100 dark:border-white/10 hover:bg-gray-50 transition-colors"
+                >
+                    {settings.theme === 'dark' ? <Sun size={20}/> : <Moon size={20}/>}
+                </button>
+
+                {!isEditMode ? (
+                <button onClick={handleAdminAccess} className="flex items-center gap-2 px-5 py-2.5 bg-white dark:bg-slate-800 rounded-full shadow-sm hover:shadow-md transition-all text-sm font-medium border border-gray-100 dark:border-white/10 dark:text-gray-200">
+                    <LayoutGrid size={16} /> 管理面板
+                </button>
+                ) : (
+                <button onClick={toggleEditMode} className="px-5 py-2.5 bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-full font-medium shadow-lg hover:opacity-90 transition-opacity">
+                    返回首页
+                </button>
+                )}
+            </div>
+          </div>
+
+          {/* Hero / Greeting */}
+          {!isEditMode && (
+            <div className="py-8 animate-fade-in-up flex flex-col items-center relative">
+              
+              {/* Clock Section */}
+              <div className="mb-6 text-center select-none">
+                 <div className="text-7xl md:text-8xl font-bold tracking-tighter text-gray-800 dark:text-white tabular-nums leading-none font-[system-ui]">
+                     {clock.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                 </div>
+                 <div className="text-base md:text-lg text-gray-500 dark:text-gray-400 font-medium mt-2 tracking-wide">
+                     {clock.toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' })}
+                 </div>
+              </div>
+
+              <h1 className="text-3xl md:text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-violet-600 to-blue-500 mb-6 text-center max-w-2xl leading-tight">
+                {currentTime}，
+                <span className="text-gray-800 dark:text-gray-100 block sm:inline sm:ml-2">
+                    {aiGreeting || "愿你今天拥有无限灵感。"}
+                </span>
+              </h1>
+              
+              {/* Search Bar Container */}
+              <div className="mt-4 w-full max-w-3xl mx-auto group">
+                <form onSubmit={handleSearch} className="relative flex items-center p-2 glass-panel rounded-2xl transition-all group-focus-within:ring-2 ring-violet-500/50 shadow-lg shadow-violet-500/5">
+                  {/* Active Search Engine Logo - No Dropdown */}
+                  <div className="flex items-center justify-center pl-3 pr-2 border-r border-gray-200 dark:border-white/10 mr-2">
+                     <Favicon url={activeSearchEngine.baseUrl} size={24} className="shadow-sm" />
+                  </div>
+                  <input 
+                    type="text" 
+                    placeholder={`${activeSearchEngine.name} 搜索...`}
+                    className="flex-1 bg-transparent border-none outline-none text-lg text-gray-800 dark:text-white placeholder-gray-400 h-10"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                  <button type="submit" className="p-3 bg-violet-600 hover:bg-violet-700 text-white rounded-xl transition-colors shadow-lg shadow-violet-600/30">
+                    <Search size={20} />
+                  </button>
+                </form>
+
+                {/* Search Engine Quick Toggles (Icons Only for cleaner look, clickable manually) */}
+                <div className="flex flex-wrap justify-center gap-3 mt-6">
+                  {searchEngines.map(engine => (
+                    <button
+                      key={engine.id}
+                      onClick={() => {
+                          setLocalSettings({...settings, activeSearchEngineId: engine.id});
+                          saveSettings({...settings, activeSearchEngineId: engine.id});
+                      }}
+                      className={`
+                        flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all text-xs font-medium
+                        ${settings.activeSearchEngineId === engine.id 
+                            ? 'bg-violet-100 text-violet-700 border-violet-200 dark:bg-violet-900/30 dark:text-violet-300 dark:border-violet-700 shadow-sm' 
+                            : 'bg-transparent text-gray-500 border-transparent hover:bg-gray-100 dark:hover:bg-white/5'}
+                      `}
+                    >
+                      <Favicon url={engine.baseUrl} size={14} className="rounded-sm" />
+                      {engine.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Total Website Counter Badge */}
+              <div className="mt-8 inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/50 dark:bg-slate-800/50 border border-gray-200 dark:border-white/10 text-sm text-gray-500 dark:text-gray-400 backdrop-blur-md shadow-sm transition-transform hover:scale-105 select-none">
+                 <Globe size={14} className="text-violet-500" />
+                 <span>已收录 <strong>{totalLinks}</strong> 个优质站点</span>
+              </div>
+            </div>
+          )}
+          
+          {/* Link Categories */}
+          <div className="space-y-8 pb-20">
+            {categories.map((category) => (
+              <div key={category.id} className={`${isEditMode ? 'glass-panel p-6 rounded-3xl' : ''} transition-all duration-300`}>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3 flex-1">
+                    {isEditMode ? <Icon name={category.icon} className="text-gray-800 dark:text-white" /> : <Icon name={category.icon} className="text-yellow-500 dark:text-yellow-400" />}
+                    
+                    {/* Editable Category Title */}
+                    {isEditMode ? (
+                        <input 
+                            value={category.title}
+                            onChange={(e) => handleCategoryNameChange(category.id, e.target.value)}
+                            onBlur={(e) => handleCategoryNameBlur(category.id, e.target.value)}
+                            className="bg-transparent border-b border-dashed border-gray-400 dark:border-gray-500 text-lg font-bold text-gray-800 dark:text-gray-100 outline-none w-full max-w-[200px]"
+                        />
+                    ) : (
+                        <h2 className="font-bold text-lg text-gray-800 dark:text-gray-100">{category.title}</h2>
+                    )}
+
+                  </div>
+                  {isEditMode && (
+                    <div className="flex gap-2">
+                       <button className="px-3 py-1.5 bg-violet-50 text-violet-600 rounded-lg text-sm font-medium flex items-center gap-1 hover:bg-violet-100 transition-colors"
+                        onClick={() => setShowGenLinksModal({catId: category.id, title: category.title})}
+                       >
+                         <Wand2 size={14} /> AI 填充
+                       </button>
+                       <button 
+                        onClick={() => {
+                          const newCats = categories.filter(c => c.id !== category.id);
+                          setCategories(newCats);
+                          saveCategories(newCats);
+                        }}
+                        className="p-2 text-gray-400 hover:text-red-500 transition-colors"
+                      >
+                         <Trash2 size={16} />
+                       </button>
+                    </div>
+                  )}
+                </div>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {category.links.map((link) => (
+                    <div 
+                      key={link.id}
+                      onClick={() => !isEditMode && window.open(link.url, settings.openInNewTab ? '_blank' : '_self')}
+                      className={`
+                        relative group flex items-start gap-4 p-4 rounded-2xl transition-all duration-300
+                        ${isEditMode ? 'bg-gray-50 dark:bg-slate-800/50 border border-gray-200 dark:border-white/5 cursor-move' : 'bg-white dark:bg-slate-800 hover:shadow-xl hover:-translate-y-1 cursor-pointer border border-transparent hover:border-violet-100 dark:hover:border-violet-900/30'}
+                      `}
+                    >
+                      <Favicon url={link.url} />
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-semibold text-gray-900 dark:text-gray-100 truncate">{link.title}</h3>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-1">{link.description}</p>
+                      </div>
+                      
+                      {isEditMode && (
+                        <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white dark:bg-slate-800 p-1 rounded-lg shadow-sm z-10">
+                          <button onClick={(e) => { e.stopPropagation(); setEditingLink({ catId: category.id, link }); setLinkForm({...link}); }} className="p-1.5 text-blue-500 hover:bg-blue-50 rounded">
+                            <Edit3 size={14} />
+                          </button>
+                          <button onClick={(e) => { e.stopPropagation(); handleDeleteLink(category.id, link.id); }} className="p-1.5 text-red-500 hover:bg-red-50 rounded">
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  
+                  {isEditMode && (
+                    <button 
+                      onClick={() => {
+                        setEditingLink({ catId: category.id });
+                        setLinkForm({ color: '#666666' });
+                      }}
+                      className="flex items-center justify-center gap-2 p-4 rounded-2xl border-2 border-dashed border-gray-200 dark:border-white/10 text-gray-400 hover:border-violet-300 hover:text-violet-500 transition-all min-h-[88px]"
+                    >
+                      <Plus size={20} />
+                      <span className="font-medium">添加链接</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+        </div>
+      </main>
+
+      {/* --- Modals --- */}
+      
+      {/* Login Modal */}
+      {showLoginModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fade-in">
+           <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-2xl w-full max-w-sm border border-white/20 relative">
+              <button onClick={() => setShowLoginModal(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600">
+                <X size={20} />
+              </button>
+              <div className="flex flex-col items-center mb-6">
+                 <div className="w-12 h-12 bg-violet-100 dark:bg-violet-900/30 text-violet-600 rounded-full flex items-center justify-center mb-4">
+                    <Lock size={24} />
+                 </div>
+                 <h2 className="text-xl font-bold text-gray-900 dark:text-white">管理员登录</h2>
+                 <p className="text-sm text-gray-500 mt-2">请输入密码以进入管理面板</p>
+              </div>
+              <form onSubmit={handleLogin} className="space-y-4">
+                 <div>
+                   <input 
+                     type="password" 
+                     value={passwordInput}
+                     onChange={(e) => setPasswordInput(e.target.value)}
+                     className="w-full p-3 rounded-xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-slate-900 focus:ring-2 focus:ring-violet-500 outline-none text-center tracking-widest"
+                     placeholder="••••••"
+                     autoFocus
+                   />
+                   {loginError && (
+                     <div className="flex items-center justify-center gap-2 text-red-500 text-xs mt-2">
+                       <AlertCircle size={12} /> {loginError}
+                     </div>
+                   )}
+                 </div>
+                 <button type="submit" className="w-full py-3 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-bold transition-colors">
+                   验证身份
+                 </button>
+              </form>
+           </div>
+        </div>
+      )}
+
+      {/* Confirm Modal */}
+      {confirmModal && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-fade-in">
+            <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-2xl w-full max-w-sm animate-scale-in">
+                <h3 className="text-lg font-bold mb-2 text-gray-900 dark:text-white">确认操作</h3>
+                <p className="text-gray-500 mb-6">{confirmModal.message}</p>
+                <div className="flex gap-3">
+                    <button 
+                        onClick={() => setConfirmModal(null)}
+                        className="flex-1 py-2.5 bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 rounded-xl font-medium hover:bg-gray-200 dark:hover:bg-slate-600 transition-colors"
+                    >
+                        取消
+                    </button>
+                    <button 
+                        onClick={confirmModal.onConfirm}
+                        className="flex-1 py-2.5 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 transition-colors shadow-lg shadow-red-600/20"
+                    >
+                        确认删除
+                    </button>
+                </div>
+            </div>
+        </div>
+      )}
+
+      {/* Generate Links Modal */}
+      {showGenLinksModal && (
+         <Modal title={`AI 生成: ${showGenLinksModal.title}`} onClose={() => setShowGenLinksModal(null)}>
+            <div className="p-6 space-y-6">
+               <div className="p-4 bg-violet-50 dark:bg-violet-900/20 rounded-xl border border-violet-100 dark:border-violet-800 text-violet-800 dark:text-violet-200 text-sm leading-relaxed">
+                  <div className="flex gap-2 items-start">
+                     <Wand2 className="shrink-0 mt-0.5" size={16} />
+                     <p>AI 将根据分类名称 <strong>"{showGenLinksModal.title}"</strong> 自动搜索并生成相关的高质量网站链接。</p>
+                  </div>
+               </div>
+
+               <div>
+                  <div className="flex justify-between mb-2">
+                     <label className="text-sm font-bold text-gray-700 dark:text-gray-300">生成数量</label>
+                     <span className="text-sm font-mono text-violet-600 font-bold">{genCount} 个</span>
+                  </div>
+                  <input 
+                    type="range" min="1" max="10" 
+                    value={genCount} 
+                    onChange={(e) => setGenCount(parseInt(e.target.value))}
+                    className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-violet-600"
+                  />
+                  <div className="flex justify-between text-xs text-gray-400 mt-2">
+                     <span>1</span>
+                     <span>10</span>
+                  </div>
+               </div>
+
+               <button 
+                 onClick={handleGenerateCategoryLinks}
+                 disabled={isGeneratingLinks}
+                 className="w-full py-4 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white rounded-xl font-bold text-lg hover:shadow-lg hover:shadow-violet-500/20 transition-all disabled:opacity-70 flex items-center justify-center gap-2"
+               >
+                 {isGeneratingLinks ? (
+                    <>
+                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      正在思考中...
+                    </>
+                 ) : (
+                    <>
+                      <Wand2 size={20} />
+                      开始生成
+                    </>
+                 )}
+               </button>
+            </div>
+         </Modal>
+      )}
+
+      {/* Global Settings Modal */}
+      {showSettingsModal && (
+        <Modal title="全局设置" onClose={() => setShowSettingsModal(false)}>
+          <div className="flex flex-col h-full">
+            {/* Tabs Header */}
+            <div className="flex items-center gap-1 p-1 bg-gray-100 dark:bg-slate-900/50 rounded-xl mb-6 mx-6 mt-2">
+                <button 
+                    onClick={() => setActiveSettingsTab('general')}
+                    className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-2 ${activeSettingsTab === 'general' ? 'bg-white dark:bg-slate-800 shadow-sm text-violet-600' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'}`}
+                >
+                    <TypeIcon size={16} /> 站点信息
+                </button>
+                <button 
+                    onClick={() => setActiveSettingsTab('appearance')}
+                    className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-2 ${activeSettingsTab === 'appearance' ? 'bg-white dark:bg-slate-800 shadow-sm text-violet-600' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'}`}
+                >
+                    <Palette size={16} /> 外观定制
+                </button>
+                <button 
+                    onClick={() => setActiveSettingsTab('search')}
+                    className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-2 ${activeSettingsTab === 'search' ? 'bg-white dark:bg-slate-800 shadow-sm text-violet-600' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'}`}
+                >
+                    <Search size={16} /> 搜索引擎
+                </button>
+            </div>
+
+            <div className="px-6 pb-6 space-y-6 overflow-y-auto">
+                {/* General Settings Tab (Site Name/Logo) */}
+                {activeSettingsTab === 'general' && (
+                    <div className="space-y-6 animate-fade-in">
+                        <section className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">站点名称</label>
+                                <input 
+                                    type="text" 
+                                    value={settings.appName}
+                                    onChange={(e) => {
+                                        const val = e.target.value;
+                                        setLocalSettings({...settings, appName: val});
+                                        saveSettings({...settings, appName: val});
+                                    }}
+                                    className="w-full p-3 rounded-xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-slate-900 focus:ring-2 focus:ring-violet-500 outline-none"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">站点 Logo (图标名称)</label>
+                                <div className="flex gap-3">
+                                    <div className="flex-1 flex items-center gap-2 p-3 rounded-xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-slate-900">
+                                        <div className="w-8 h-8 flex items-center justify-center bg-violet-100 dark:bg-violet-900/30 text-violet-600 rounded-lg">
+                                            <Icon name={settings.appIcon} size={20} />
+                                        </div>
+                                        <input 
+                                            type="text" 
+                                            value={settings.appIcon}
+                                            onChange={(e) => {
+                                                const val = e.target.value;
+                                                setLocalSettings({...settings, appIcon: val});
+                                                saveSettings({...settings, appIcon: val});
+                                            }}
+                                            className="flex-1 bg-transparent border-none outline-none font-mono text-sm"
+                                            placeholder="e.g. Zap, Home, Star"
+                                        />
+                                    </div>
+                                    <button 
+                                        onClick={handleGenerateAppIcon}
+                                        disabled={isAiLoading}
+                                        className="px-4 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white rounded-xl font-medium shadow-lg hover:shadow-violet-500/30 transition-all flex items-center gap-2 whitespace-nowrap disabled:opacity-70"
+                                    >
+                                        {isAiLoading ? '...' : <><Wand2 size={16} /> AI 生成</>}
+                                    </button>
+                                </div>
+                                <p className="text-xs text-gray-400 mt-2">支持 Lucide Icon 库中的任意图标名称。</p>
+                            </div>
+                        </section>
+                    </div>
+                )}
+
+                {/* Appearance Tab */}
+                {activeSettingsTab === 'appearance' && (
+                    <div className="space-y-6 animate-fade-in">
+                        {/* Background Mode */}
+                         <section>
+                            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">背景风格</h3>
+                            <div className="grid grid-cols-3 gap-3">
+                                {[
+                                    { id: 'aurora', name: '极光流体', icon: <Layers size={20} className="text-blue-500" /> },
+                                    { id: 'monotone', name: '纯净单色', icon: <div className="w-5 h-5 bg-gray-300 rounded-full" /> },
+                                    { id: 'custom', name: '自定义壁纸', icon: <ImageIcon size={20} className="text-violet-500" /> }
+                                ].map(mode => (
+                                    <button
+                                        key={mode.id}
+                                        onClick={() => {
+                                            const newSettings = { ...settings, backgroundMode: mode.id as any };
+                                            setLocalSettings(newSettings);
+                                            saveSettings(newSettings);
+                                        }}
+                                        className={`flex flex-col items-center gap-3 p-4 rounded-xl border-2 transition-all ${settings.backgroundMode === mode.id ? 'border-violet-500 bg-violet-50 dark:bg-violet-900/20' : 'border-gray-100 dark:border-white/5 hover:bg-gray-50 dark:hover:bg-white/5'}`}
+                                    >
+                                        <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
+                                            {mode.icon}
+                                        </div>
+                                        <span className={`text-xs font-bold ${settings.backgroundMode === mode.id ? 'text-violet-700 dark:text-violet-300' : 'text-gray-600 dark:text-gray-400'}`}>{mode.name}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        </section>
+
+                        {/* Custom Wallpaper Input */}
+                        {settings.backgroundMode === 'custom' && (
+                             <div className="p-4 bg-gray-50 dark:bg-slate-900 rounded-xl border border-gray-100 dark:border-white/5 space-y-3 animate-fade-in">
+                                 <h4 className="text-sm font-bold text-gray-700 dark:text-white">自定义壁纸设置</h4>
+                                 <input 
+                                     type="text" 
+                                     placeholder="输入图片 URL..." 
+                                     value={settings.customBackgroundImage || ''}
+                                     onChange={(e) => {
+                                         const val = e.target.value;
+                                         setLocalSettings({...settings, customBackgroundImage: val});
+                                         saveSettings({...settings, customBackgroundImage: val});
+                                     }}
+                                     className="w-full p-2.5 rounded-lg border border-gray-200 dark:border-white/10 dark:bg-slate-800 text-sm focus:ring-2 focus:ring-violet-500 outline-none"
+                                 />
+                                 <div className="relative">
+                                    <input 
+                                        type="file" 
+                                        accept="image/*"
+                                        onChange={handleFileUpload}
+                                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                    />
+                                    <button className="w-full py-2.5 bg-white dark:bg-slate-800 border border-dashed border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-500 hover:text-violet-600 hover:border-violet-400 transition-colors flex items-center justify-center gap-2">
+                                        <Upload size={16} /> 上传本地图片 (Max 2MB)
+                                    </button>
+                                 </div>
+                             </div>
+                        )}
+
+                        <div className="h-px bg-gray-100 dark:bg-white/5" />
+
+                        {/* Opacity Slider */}
+                        <section>
+                            <div className="flex justify-between mb-2">
+                                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">卡片透明度</h3>
+                                <span className="text-xs font-bold text-gray-500">{settings.cardOpacity}%</span>
+                            </div>
+                            <input 
+                            type="range" min="0" max="100" 
+                            value={settings.cardOpacity} 
+                            onChange={(e) => {
+                                const val = parseInt(e.target.value);
+                                setLocalSettings({...settings, cardOpacity: val});
+                                saveSettings({...settings, cardOpacity: val});
+                            }}
+                            className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-violet-600"
+                            />
+                        </section>
+                    </div>
+                )}
+
+                {/* Search Settings Tab */}
+                {activeSettingsTab === 'search' && (
+                    <div className="space-y-4 animate-fade-in">
+                         {searchEngines.map(engine => (
+                            <div key={engine.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-slate-900 rounded-xl border border-gray-100 dark:border-white/5">
+                                <div className="flex items-center gap-3">
+                                    <Favicon url={engine.baseUrl} size={20} />
+                                    <div>
+                                        <div className="font-medium text-sm text-gray-900 dark:text-white">{engine.name}</div>
+                                        <div className="text-xs text-gray-400 truncate max-w-[200px]">{engine.searchUrlPattern}</div>
+                                    </div>
+                                </div>
+                                <button 
+                                    onClick={() => handleDeleteEngine(engine.id)}
+                                    className="p-2 text-gray-400 hover:text-red-500 transition-colors"
+                                >
+                                    <Trash2 size={16} />
+                                </button>
+                            </div>
+                        ))}
+
+                         {!isAddingEngine ? (
+                            <button 
+                                onClick={() => setIsAddingEngine(true)}
+                                className="w-full py-2.5 border-2 border-dashed border-gray-200 dark:border-white/10 rounded-xl text-gray-500 hover:border-violet-400 hover:text-violet-600 font-medium transition-all flex items-center justify-center gap-2"
+                            >
+                                <Plus size={16} /> 添加搜索引擎
+                            </button>
+                        ) : (
+                            <div className="p-4 bg-violet-50 dark:bg-violet-900/10 rounded-xl border border-violet-100 dark:border-violet-900/20 space-y-3 animate-fade-in">
+                                {/* ... Engine Adding Form ... */}
+                                <div className="flex gap-2">
+                                    <input 
+                                        type="text" 
+                                        placeholder="主页 URL (如 bing.com)" 
+                                        value={engineForm.baseUrl || ''}
+                                        onChange={e => setEngineForm({...engineForm, baseUrl: e.target.value})}
+                                        className="flex-1 p-2 rounded-lg text-sm border border-gray-200 dark:border-white/10 dark:bg-slate-900"
+                                    />
+                                     <button 
+                                        onClick={handleAiFillEngine}
+                                        disabled={isAiLoading}
+                                        className="px-3 bg-violet-600 text-white rounded-lg text-xs font-medium flex items-center gap-1 disabled:opacity-50"
+                                    >
+                                        {isAiLoading ? '...' : <><Wand2 size={12}/> AI 识别</>}
+                                    </button>
+                                </div>
+                                <input 
+                                     type="text" 
+                                     placeholder="显示名称" 
+                                     value={engineForm.name || ''}
+                                     onChange={e => setEngineForm({...engineForm, name: e.target.value})}
+                                     className="w-full p-2 rounded-lg text-sm border border-gray-200 dark:border-white/10 dark:bg-slate-900"
+                                />
+                                 <input 
+                                     type="text" 
+                                     placeholder="搜索串格式 (自动生成或手动填写)" 
+                                     value={engineForm.searchUrlPattern || ''}
+                                     onChange={e => setEngineForm({...engineForm, searchUrlPattern: e.target.value})}
+                                     className="w-full p-2 rounded-lg text-xs font-mono text-gray-500 border border-gray-200 dark:border-white/10 dark:bg-slate-900"
+                                />
+                                <div className="flex gap-2 pt-2">
+                                    <button onClick={handleSaveEngine} className="flex-1 py-2 bg-gray-900 text-white dark:bg-white dark:text-gray-900 rounded-lg text-sm font-bold">确认添加</button>
+                                    <button onClick={() => { setIsAddingEngine(false); setEngineForm({}); }} className="px-4 py-2 bg-transparent text-gray-500 hover:bg-gray-200 dark:hover:bg-white/10 rounded-lg text-sm">取消</button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+            </div>
+            
+            <div className="p-6 pt-4 border-t border-gray-100 dark:border-white/10 bg-white dark:bg-slate-800 rounded-b-2xl">
+              <button 
+                onClick={() => setShowSettingsModal(false)}
+                className="w-full py-3 bg-gray-900 text-white dark:bg-white dark:text-gray-900 rounded-xl font-bold hover:shadow-lg hover:scale-[1.02] transition-all"
+              >
+                保存并关闭
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Edit Link Modal */}
+      {editingLink && (
+        <Modal title={editingLink.link ? '编辑链接' : '新建链接'} onClose={() => { setEditingLink(null); setLinkForm({}); }}>
+           <div className="p-6 flex flex-col md:flex-row gap-8">
+             {/* Left Form */}
+             <div className="flex-1 space-y-5">
+               <div>
+                 <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">URL 地址</label>
+                 <div className="flex gap-2">
+                   <input 
+                    type="text" 
+                    value={linkForm.url || ''}
+                    onChange={(e) => setLinkForm({...linkForm, url: e.target.value})}
+                    placeholder="https://example.com"
+                    className="flex-1 p-3 rounded-xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-slate-900 focus:ring-2 focus:ring-violet-500 outline-none transition-all"
+                   />
+                   <button 
+                    onClick={handleAiFillLink}
+                    disabled={isAiLoading}
+                    className="px-4 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white rounded-xl font-medium shadow-lg hover:shadow-violet-500/30 transition-all flex items-center gap-2 whitespace-nowrap disabled:opacity-70"
+                   >
+                     {isAiLoading ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"/> : <Wand2 size={16} />}
+                     AI 识别
+                   </button>
+                 </div>
+               </div>
+
+               <div>
+                 <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">标题名称</label>
+                 <input 
+                    type="text" 
+                    value={linkForm.title || ''}
+                    onChange={(e) => setLinkForm({...linkForm, title: e.target.value})}
+                    className="w-full p-3 rounded-xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-slate-900 focus:ring-2 focus:ring-violet-500 outline-none"
+                   />
+               </div>
+
+               <div>
+                 <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">描述信息</label>
+                 <textarea 
+                    value={linkForm.description || ''}
+                    onChange={(e) => setLinkForm({...linkForm, description: e.target.value})}
+                    rows={3}
+                    className="w-full p-3 rounded-xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-slate-900 focus:ring-2 focus:ring-violet-500 outline-none resize-none"
+                   />
+               </div>
+
+               <div>
+                 <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">品牌主题色</label>
+                 <div className="flex items-center gap-3 p-2 border border-gray-200 dark:border-white/10 rounded-xl bg-gray-50 dark:bg-slate-900">
+                   <input 
+                    type="color" 
+                    value={linkForm.color || '#666666'}
+                    onChange={(e) => setLinkForm({...linkForm, color: e.target.value})}
+                    className="w-10 h-10 rounded cursor-pointer bg-transparent border-none"
+                   />
+                   <span className="text-gray-500 font-mono">{linkForm.color}</span>
+                 </div>
+               </div>
+               
+               <button 
+                onClick={handleSaveLink}
+                className="w-full py-4 bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-xl font-bold text-lg hover:shadow-xl hover:-translate-y-0.5 transition-all mt-4"
+               >
+                 保存修改
+               </button>
+             </div>
+
+             {/* Right Preview */}
+             <div className="w-full md:w-72 border-l border-gray-100 dark:border-white/5 pl-0 md:pl-8 flex flex-col items-center justify-center">
+               <h4 className="text-sm font-bold text-gray-400 mb-6 uppercase tracking-wider">实时预览</h4>
+               <div className="w-full bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-xl border border-gray-100 dark:border-white/5 relative overflow-hidden group">
+                  <div className="absolute top-0 left-0 w-1 h-full bg-violet-500"></div>
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center overflow-hidden shrink-0">
+                      {linkForm.url ? (
+                         <img src={`https://s2.googleusercontent.com/s2/favicons?domain_url=${linkForm.url}&sz=64`} alt="icon" />
+                      ) : (
+                         <Globe size={20} className="text-gray-400" />
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="font-bold text-gray-900 dark:text-white truncate">{linkForm.title || '标题'}</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">{linkForm.description || '描述信息...'}</div>
+                    </div>
+                  </div>
+                  <div className="absolute top-2 right-2 text-gray-300">
+                    <Globe size={12} />
+                  </div>
+               </div>
+               <p className="mt-8 text-center text-xs text-gray-400 leading-relaxed px-4">
+                 这是链接在仪表盘上的显示效果。<br/>
+                 AI 自动识别功能可以帮助你快速填充信息。
+               </p>
+             </div>
+           </div>
+        </Modal>
+      )}
+
+    </div>
+  );
+};
+
+export default App;
