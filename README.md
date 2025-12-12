@@ -2,232 +2,171 @@
 
 # 🌌 Aurora Pro &middot; 极光导航
 
-**一款专为极客打造的新一代 AI 个人导航仪表盘，融合了设计美学、强大功能与极致的个性化体验。**
+**一款专为极客打造的新一代 AI 个人导航仪表盘**
+<br>
+*融合设计美学、智能算法与极致的个性化体验*
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FMar-ct%2FAurora-pro&env=API_KEY,ADMIN_PASSWORD&envDescription=Google%20Gemini%20API%20Key%20and%20Admin%20Password&envLink=https://aistudio.google.com/app/apikey)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue)
+![React](https://img.shields.io/badge/React-19-blue)
+![Vercel KV](https://img.shields.io/badge/Vercel-KV_Sync-black)
 
 </div>
 
 <br/>
 
-> Aurora Pro 将您的浏览器起始页，从一个简单的链接集合，转变为一个智能、高效且赏心悦目的个人工作空间。它不仅是工具，更是您数字生活的美学延伸。
+> **Aurora Pro** 将您的浏览器起始页，从一个简单的链接集合，转变为一个**会思考**、**懂习惯**的个人数字中枢。它不仅看起来赏心悦目，更能通过 AI 和算法自动优化您的使用效率。
 
 ---
 
-## ✨ 核心功能 (Core Features)
+## ✨ 核心亮点 (Core Features)
 
-### 🎨 仪表盘美学 (Aesthetics)
-- **高度可定制**: 在全局设置中自定义**站点名称**与**Logo图标**，打造专属品牌感。
-- **实时时钟 & 统计**: 主页优雅展示**大字体实时数字时钟**，并自动统计已收录的**网站总数**，信息一目了然。
-- **动态背景**: 内置优雅的**极光流体**动态背景，同时支持**纯净单色**或**自定义壁纸**（URL或本地上传），满足一切个性化需求。
-- **智能图标系统**: 在管理模式下修改分类名称，AI 将自动为其匹配最合适的 [Lucide](https://lucide.dev/) 图标，告别手动查找。
+### 🧠 1. 智能常用推荐 (Smart Favorites) <span style="color: #8b5cf6; font-size: 0.8em; font-weight: bold;">NEW!</span>
+告别手动整理！系统内置智能追踪算法：
+- **自动学习**: 系统会自动记录您对每个网站的点击使用频率。
+- **动态晋升**: 全站使用频率最高的 **8 个网站** 会自动晋升至首页顶部的「🔥 常用推荐」分类。
+- **实时更新**: 随着您使用习惯的变化，推荐列表会自动调整，确保您最需要的工具永远触手可及。
 
-### 🤖 AI 智能助理 (Powered by Google Gemini)
-- **AI 智能问候**: 每次打开页面，AI 都会生成一句为开发者/设计师量身定制的短语，带来一天的好心情。
-- **一键链接填充**: 只需粘贴一个 URL，AI 即可自动识别网站标题、生成精准中文简介、并提取品牌主色调。
-- **分类内容建议**: 面对一个新分类无从下手？AI 可根据分类名称，自动推荐数个相关的高质量网站链接。
-- **智能搜索配置**: 添加新的搜索引擎时，AI 可通过 URL 自动分析并生成搜索串格式。
+### 🤖 2. 深度 AI 集成 (Powered by Gemini)
+- **精准网站识别**: 只需粘贴一个 URL，AI 即可自动提取网站标题、生成**精准的中文简介**、并提取品牌主色调，同时自动过滤虚假链接。
+- **智能分类填充**: 新建一个分类（如“设计灵感”），AI 可一键为您搜索并填充该领域最高质量的真实网站资源。
+- **每日灵感寄语**: 拒绝生硬的翻译腔！经过调优的 AI 模型每天为您生成一句**纯中文**的开发者/设计师专属励志短语，包含名人名言与哲学思考。
+- **图标自动匹配**: 根据分类名称，AI 自动从图标库中匹配最符合语境的图标。
 
-### ☁️ 无缝云同步 (Seamless Cloud Sync)
-- **企业级云同步**: 基于 **Vercel KV**，实现所有设置和链接数据在云端存储，确保您在任何设备上（桌面、移动端）访问的都是最新版本。
-- **连接状态感知**: 管理侧边栏实时显示云同步连接状态，让您对数据安全了如指掌。
+### 🎨 3. 极致美学与交互
+- **极光流体背景**: 默认启用优雅的极光动态背景，同时也支持**纯净单色**或**自定义壁纸**（支持上传图片）。
+- **实时数字时钟**: 醒目的超大字体时钟，配合日期显示，让时间管理更直观。
+- **沉浸式体验**: 精心调教的毛玻璃效果（Glassmorphism）、平滑的过渡动画以及完美的深色模式（Dark Mode）适配。
 
-### ⚙️ 灵活的 AI 配置
-- **多服务商支持**: 不仅仅是 Google Gemini！系统支持任何兼容 **OpenAI API 格式**的第三方服务商（如 Longcat, Deepseek 等）。
-- **可视化管理**: 在设置面板中轻松添加、编辑、删除和切换不同的 AI 服务商配置。
-- **连接测试**: 一键测试 API Key 和 Base URL 的连通性，并可自动拉取模型列表，配置过程清晰透明。
-
----
-
-## 🛠️ 技术栈 (Tech Stack)
-
-- **前端框架**: [React](https://react.dev/) + [Vite](https://vitejs.dev/)
-- **UI & 样式**: [Tailwind CSS](https://tailwindcss.com/)
-- **核心 AI 能力**: [Google Gemini API](https://ai.google.dev/)
-- **云端数据同步**: [Vercel KV](https://vercel.com/storage/kv)
-- **图标库**: [Lucide React](https://lucide.dev/)
-- **语言**: TypeScript
+### ☁️ 4. 企业级云同步
+- **多端无缝漫游**: 基于 **Redis (Upstash)** 数据库，您的所有配置、链接和点击数据均在云端加密存储。
+- **即时同步**: 在公司电脑添加的链接，回家打开手机立刻就能看到。
 
 ---
 
-## 🚀 Vercel 部署完全指南 (保姆级文字教程)
+## 🚀 部署指南 (保姆级教程)
 
-只需五步，即可拥有一个功能完整、使用自定义域名的私有 AI 导航站。
+只需简单的 5 步，您就可以免费拥有这个强大的导航站。无需任何编程基础。
 
-### 前置准备
-1.  一个 **GitHub** 账户。
-2.  一个 **Vercel** 账户，并已关联您的 GitHub。
-3.  一个 **Google Gemini API Key**。
-    - 前往 [Google AI Studio](https://aistudio.google.com/app/apikey) 创建并复制您的密钥。
-    - **强烈建议**: 前往 [Google Cloud Billing](https://console.cloud.google.com/billing) 为您的项目启用结算，以获取近乎无限的 API 调用额度，避免免费额度用尽。
-
----
-
-### ✅ 第一步：一键部署项目
-
-1.  点击页面顶部的 **"Deploy with Vercel"** 蓝色按钮。
-2.  Vercel 将引导您创建一个新的代码仓库 (Repository)，请随意命名（例如 `my-aurora-pro`）。
-3.  在 "Configure Project" 页面，展开 **Environment Variables** (环境变量) 部分，填入以下两项：
-
-| 变量名          | 必填 | 描述                                       |
-| :-------------- | :--: | :----------------------------------------- |
-| `API_KEY`       |  ✅  | 您在上一步获取的 Google Gemini API 密钥。      |
-| `ADMIN_PASSWORD`|  ✅  | 用于登录管理面板的**自定义密码**，请务必设置。 |
-
-4.  点击 **Deploy**，等待约 1 分钟，Vercel 会完成首次构建和部署。
+### 准备工作
+1.  拥有一个 **GitHub** 账号。
+2.  拥有一个 **Vercel** 账号（可使用 GitHub 登录）。
+3.  获取 **Google Gemini API Key** [点击获取](https://aistudio.google.com/app/apikey)。
+    *   *提示：Google API 目前有免费额度，对于个人使用完全足够。*
 
 ---
 
-### ✅ 第二步：创建并连接云数据库 (Vercel KV) - 关键步骤
+### 第一步：一键克隆与部署
 
-为了让您的导航数据能够在所有设备间同步，此步骤**至关重要**。我们将引导您完成每一个点击。
+1.  点击页面顶部的蓝色 **[Deploy with Vercel]** 按钮。
+2.  在 Vercel 页面中，在 **"Create Git Repository"** 处选择您的 GitHub 账号，并输入项目名称（例如 `my-nav`），点击 **Create**。
+3.  **配置环境变量 (Environment Variables)**：
+    Vercel 会自动识别出所需的变量，请填写以下内容：
 
-1.  **进入 Storage 页面**:
-    *   项目部署成功后，您会自动进入 Vercel 的项目控制台。
-    *   在顶部导航栏中找到并点击 **`Storage`** 标签页 (通常在 `Deployments` 和 `Logs` 之间)。
+    | 变量名 (Name) | 填写内容 (Value) | 说明 |
+    | :--- | :--- | :--- |
+    | `API_KEY` | `AIzaSy...` | 您的 Google Gemini API 密钥 |
+    | `ADMIN_PASSWORD` | `yourpassword` | **自定义一个密码**，用于登录管理后台 |
 
-2.  **选择 KV 数据库**:
-    *   在 Storage 页面，您会看到 Vercel 提供的几种存储选项。
-    *   请找到 **`KV (Durable Redis)`** 这一项。
-    *   点击它右侧的 **`Connect Store`** 按钮。
-
-3.  **创建数据库**:
-    *   此时会弹出一个创建数据库的窗口。
-    *   **您无需修改任何内容**。Vercel 已经为您自动生成了数据库名称并选择了免费套餐。
-    *   直接滚动到底部，点击右下角黑色的 **`Create`** 按钮。
-
-4.  **连接到项目 (最关键！)**:
-    *   创建成功后，Vercel 会立即显示一个 **"Connect to Project"** 的界面。
-    *   在这个界面，请**确保**您的 `aurora-pro` (或您自定义的仓库名) 项目被选中。
-    *   然后点击蓝色的 **`Connect`** 按钮。
-
-5.  **自动配置完成**:
-    *   恭喜！Vercel 已经自动将云同步所需的所有环境变量 (`KV_REST_API_URL` 等) 添加到了您的项目中。
-    *   **您无需手动进行任何复制粘贴**。现在可以继续下一步了。
+4.  点击 **Deploy** 按钮，等待约 1 分钟，直到出现满屏的烟花 🎉。
 
 ---
 
-### ✅ 第三步：重新部署以应用更改 - 必须操作!
+### 第二步：连接云数据库 (实现数据同步)
 
-Vercel 不会自动将新连接的数据库密钥应用到旧的部署中。您**必须**手动触发一次 **Redeploy** (重新部署)，让新设置生效。
+**这一步至关重要！** 如果不配置，您的数据将在刷新后丢失。由于 Vercel 界面已更新，请严格按照以下步骤操作：
 
-1.  **进入 Deployments 页面**:
-    *   在您的 Vercel 项目控制台中，点击顶部的 **`Deployments`** 标签页。
-
-2.  **找到并重新部署**:
-    *   您会看到一个部署列表，找到**最顶部**的那一条记录（即最新的部署）。
-    *   将鼠标移到该条记录上，点击其最右侧出现的 **`...`** (更多选项) 菜单按钮。
-    *   在弹出的菜单中，选择 **`Redeploy`**。
-
-3.  **确认重新部署**:
-    *   Vercel 会弹出一个确认窗口。
-    *   **请确保不要勾选** "Use existing Build Cache" (使用现有构建缓存) 这个选项。我们需要一次全新的构建来应用新变量。
-    *   最后，点击右下角黑色的 **`Redeploy`** 按钮。
-
----
-
-### ✅ 第四步：初步验证
-等待重新部署完成后 (状态变为 `Ready`)，访问 Vercel 提供的 `.vercel.app` 域名。点击“管理面板”，输入您设置的密码，侧边栏底部应显示 **🟢 已连接 Vercel KV** 的绿色状态。确认一切正常后，进行最后一步。
+1.  部署完成后，点击 **"Continue to Dashboard"** 进入 Vercel 项目控制台。
+2.  点击顶部导航栏的 **Storage** 选项卡。
+3.  点击 **Connect Store** (或 Create New) 按钮。
+4.  **注意：** 在弹出的 **"Browse Storage"** 窗口中，向下滚动找到 **Marketplace Database Providers** 部分（如文档截图所示）。
+5.  点击选择 **"Upstash for Redis"**。
+    *   *注：Vercel KV 的底层服务就是 Upstash，两者完全通用且免费额度一致。*
+6.  在弹出的集成页面中：
+    *   点击 **Install** 或 **Create**。
+    *   选择 **Free (Hobby)** 计划。
+    *   在 "Link to Project" 步骤中，确保勾选了您刚刚创建的项目（例如 `my-nav`），然后点击 **Connect**。
+    *   *此时系统会自动将 `KV_REST_API_URL` 和 `KV_REST_API_TOKEN` 等环境变量注入到您的项目中。*
 
 ---
 
-### ✅ 第五步 (可选): 绑定自定义域名 (Cloudflare)
+### 第三步：重新部署 (让数据库生效)
 
-让您的导航站拥有更专业、更易记的地址。
+Vercel 不会自动在运行中的项目上应用新连接的数据库，必须手动刷新一次。
 
-#### 准备工作
-*   您已拥有一个注册好的域名。
-*   您已将该域名的 DNS nameserver (NS) 修改为 Cloudflare 的地址，并成功在 Cloudflare 面板中管理该域名。
+1.  点击顶部导航栏的 **Deployments** 选项卡。
+2.  找到列表最上方（最新）的那条部署记录。
+3.  点击右侧的 **三个点 (···)** 图标，选择 **Redeploy**。
+4.  在弹出的窗口中，直接点击 **Redeploy** (不要勾选 "Use existing Build Cache")。
 
-#### 5.1 在 Vercel 添加域名
-1.  在 Vercel 项目控制台，点击顶部 **`Settings`** 标签页，然后选择左侧的 **`Domains`** 菜单。
-2.  在输入框中输入您的域名 (例如 `your-domain.com`)，然后点击 **`Add`** 按钮。
-3.  Vercel 会自动检测到您的域名托管在 Cloudflare。此时，它会给出推荐的 DNS 配置记录，通常是一条 **A 记录** (用于根域名) 和一条 **CNAME 记录** (用于 www 子域名)。**请保持这个页面打开**。
-
-#### 5.2 在 Cloudflare 配置 DNS
-1.  打开一个新的浏览器标签页，登录您的 Cloudflare 账户。
-2.  进入对应域名的控制台，点击左侧的 **`DNS`** 菜单。
-3.  **查找并删除冲突记录**: 如果您有名为 `your-domain.com` (根域名) 或 `www` 的 `A`, `AAAA` 或 `CNAME` 记录，请先将它们**删除**，以避免冲突。
-4.  **添加 A 记录**:
-    *   点击 **`Add record`** 按钮。
-    *   **Type**: 选择 `A`。
-    *   **Name**: 输入 `@` (代表根域名)。
-    *   **IPv4 address**: 复制并粘贴 Vercel 页面上提供的 A 记录值 (例如 `76.76.21.21`)。
-    *   **Proxy status (关键!)**: **务必点击橙色云朵，使其变为灰色 (DNS only)**。这是为了让 Vercel 能成功验证域名归属权。
-    *   点击 **`Save`**。
-5.  **添加 CNAME 记录**:
-    *   再次点击 **`Add record`**。
-    *   **Type**: 选择 `CNAME`。
-    *   **Name**: 输入 `www`。
-    *   **Target**: 复制并粘贴 Vercel 页面上提供的 CNAME 记录值 (通常是 `cname.vercel-dns.com`)。
-    *   **Proxy status (关键!)**: 同样，**确保代理状态是灰色云朵 (DNS only)**。
-    *   点击 **`Save`**。
-
-#### 5.3 在 Vercel 完成验证
-1.  回到 Vercel 的域名设置页面。
-2.  等待几分钟，Vercel 会自动检测您在 Cloudflare 添加的 DNS 记录。
-3.  当记录旁边出现绿色的对勾，并且页面顶部显示 "Valid Configuration" 时，说明验证已成功。您的网站现在应该可以通过自定义域名访问了。
-
-#### 5.4 在 Cloudflare 开启代理 (推荐)
-1.  确认 Vercel 验证成功后，回到 Cloudflare 的 DNS 设置页面。
-2.  找到您刚刚添加的 `A` 记录和 `CNAME` 记录。
-3.  点击每条记录右侧的灰色云朵，**将其切换为橙色云朵 (Proxied)**。
-4.  保存更改。
-
-> **为什么要这样做?** 开启代理 (橙色云朵) 可以让您的网站流量通过 Cloudflare 的全球 CDN 网络，为您提供免费的 SSL 证书、DDoS 防护、缓存加速等强大功能，强烈推荐开启。
-
-恭喜！您的 AI 导航站已完美配置并绑定了自定义域名。
+**等待部署状态变成 "Ready" (绿色)。恭喜！您的专属 AI 导航站已就绪！**
 
 ---
 
-## 🔧 环境变量详解 (Environment Variables)
+### 第四步：开始使用
 
-| 变量名                  | 描述                                                                          | 设置方式     |
-| :---------------------- | :---------------------------------------------------------------------------- | :----------- |
-| `API_KEY`               | **（必须）** 默认的 Google Gemini API Key。                                          | 手动添加     |
-| `ADMIN_PASSWORD`        | **（必须）** 登录管理后台的密码。                                                     | 手动添加     |
-| `KV_REST_API_URL`       | Vercel KV 数据库的 API 地址。                                                       | **自动注入** |
-| `KV_REST_API_TOKEN`     | Vercel KV 数据库的访问令牌。                                                        | **自动注入** |
-| `CUSTOM_API_KEY_1` ~ `5` | 用于在 UI 中配置自定义 AI 服务商的预留环境变量槽位，方便切换不同的付费 Key。 | (可选) 手动添加 |
-
----
-
-## ⚠️ 重要：关于 API 额度与安全
-
-### API 额度
-Google 对 Gemini API 提供了免费套餐，但**免费额度非常有限**（例如，gemini-2.5-flash 模型每天仅有约 20 次的请求额度）。当您频繁使用“AI识别”、“AI填充”等功能后，很快就会遇到 `Quota Exceeded` (额度超限) 的错误。
-
-**为了确保所有 AI 功能稳定、不间断地运行，强烈建议您为您的 Google API Key 启用结算功能。** 对于个人使用场景，API 的调用费用非常低廉（通常每月仅需几美分），但能将您的使用额度提升成千上万倍。
-
-### 安全说明
-- **API Key 安全**: 您的 `API_KEY` 在构建时会作为环境变量注入到前端代码中。这是 Vercel 部署静态网站的标准行为。为了最大化安全，强烈建议您在 Google Cloud Console 中为您的 API Key **设置 HTTP Referrer 限制**，只允许您的 Vercel 域名（例如 `your-project.vercel.app`, `your-domain.com`）使用该密钥，防止被盗用。
-- **管理密码**: `ADMIN_PASSWORD` 同样作为环境变量注入，仅用于前端简单的访问控制，防止访客误操作。它并非一个高强度的后端验证机制。
+1.  访问您的 Vercel 域名（例如 `https://my-nav.vercel.app`）。
+2.  点击右上角的 **"管理面板"** 按钮。
+3.  输入您在第一步设置的 `ADMIN_PASSWORD`。
+4.  **检查状态**：侧边栏底部应显示 **🟢 已连接 Vercel KV**。
+5.  **开始配置**：
+    *   点击 **"全局设置"** 修改网站标题、Logo。
+    *   点击 **"AI 模型"** 测试 API 连接状态。
+    *   点击 **"添加链接"** 体验 AI 自动填充的魔法。
 
 ---
 
-## 💻 本地开发
+## ⚙️ 高级配置 (环境变量)
+
+如果您需要更高级的自定义，可以在 Vercel 的 `Settings` -> `Environment Variables` 中添加以下变量：
+
+| 变量名 | 描述 |
+| :--- | :--- |
+| `API_KEY` | **(必填)** 默认的 Google Gemini API Key。 |
+| `ADMIN_PASSWORD` | **(必填)** 管理后台登录密码。 |
+| `CUSTOM_API_KEY_1` ~ `5` | (可选) 预留槽位。如果您想在设置面板中快速切换不同的 API Key，可在此预先填入。 |
+| `KV_REST_API_URL` | (自动) 连接 Upstash/KV 数据库后自动生成，**请勿手动修改**。 |
+| `KV_REST_API_TOKEN` | (自动) 连接 Upstash/KV 数据库后自动生成，**请勿手动修改**。 |
+
+---
+
+## 🛠️ 本地开发 (Developers)
+
+如果您是开发者，想在本地运行或修改代码：
 
 ```bash
-# 1. 克隆您的仓库
-git clone https://github.com/your-username/aurora-pro.git
+# 1. 克隆项目
+git clone https://github.com/your-repo/aurora-pro.git
 cd aurora-pro
 
 # 2. 安装依赖
 npm install
 
-# 3. 创建环境变量文件
-# 在项目根目录新建一个名为 .env 的文件，并填入以下内容:
-# VITE_API_KEY=your_gemini_api_key
-# VITE_ADMIN_PASSWORD=your_secure_password
+# 3. 配置环境
+# 在根目录新建 .env 文件，填入：
+# VITE_API_KEY=your_key
+# VITE_ADMIN_PASSWORD=your_password
 
-# 4. 启动开发服务器
+# 4. 启动
 npm run dev
 ```
 
 ---
 
-## 🤝 贡献与支持
+## 常见问题 (FAQ)
 
-Aurora Pro 遵循 [MIT License](LICENSE) 开源协议。
-如果您喜欢这个项目，请在 GitHub 上给一个 ⭐️ Star！这是对我最大的鼓励和支持。
+**Q: 为什么“常用推荐”分类无法手动添加链接？**
+A: “常用推荐”分类是由系统算法全自动管理的。它根据您的点击行为，实时筛选出全站点击率最高的 8 个链接。您只需正常使用导航站，爱用的网站会自动出现在这里。
+
+**Q: AI 问候语显示英文或拼音？**
+A: 我们已更新 Prompt 策略，强制 AI 仅输出简体中文的名人名句或励志语录。如果仍有极个别情况，请稍后刷新即可，AI 会不断自我修正。
+
+**Q: 只有 Google Gemini 能用吗？**
+A: 默认使用 Gemini (因为免费且强大)。但我们在设置面板中预留了 **OpenAI 格式** 的接口支持。您可以添加任何兼容 OpenAI 协议的 API（如 DeepSeek, Moonshot, OneAPI 等）。
+
+---
+
+<div align="center">
+Made with ❤️ for efficiency and beauty.
+</div>
