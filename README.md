@@ -86,7 +86,7 @@ npm install
 # ADMIN_PASSWORD=your_secure_password
 
 # 4. 启动开发服务器
-npm start
+npm run dev
 ```
 
 ## 🤝 贡献与支持
