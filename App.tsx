@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Settings, Plus, Search, Moon, Sun, LayoutGrid, 
-  LogOut, LogIn, Edit3, Trash2, X, Check, Wand2, Globe, MonitorPlay, Lock, AlertCircle, RefreshCw,
-  Image as ImageIcon, Upload, Palette, Layers, Type as TypeIcon, Clock
+  LogOut, Edit3, Trash2, X, Wand2, Globe, AlertCircle, 
+  Image as ImageIcon, Upload, Palette, Type as TypeIcon, Lock
 } from 'lucide-react';
 import { Category, LinkItem, AppSettings, SearchEngine } from './types';
 import { INITIAL_DATA, INITIAL_SETTINGS, INITIAL_SEARCH_ENGINES } from './constants';
@@ -12,6 +12,12 @@ import {
 } from './services/storageService';
 import { analyzeUrl, generateCategoryLinks, getAiGreeting, suggestIcon } from './services/geminiService';
 import { Icon } from './components/Icon';
+import { clsx, type ClassValue } from "clsx";
+import { twMerge } from "tailwind-merge";
+
+function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
 
 // --- Helper Components ---
 
@@ -40,13 +46,13 @@ const Favicon = ({ url, size = 32, className }: { url: string, size?: number, cl
       <img 
         src={`https://s2.googleusercontent.com/s2/favicons?domain_url=${url}&sz=${size * 2}`}
         alt="icon" 
-        className={`bg-white rounded-full ${className}`}
+        className={cn("bg-white rounded-full", className)}
         style={{ width: size, height: size }}
         onError={(e) => { (e.target as HTMLImageElement).src = 'https://picsum.photos/32/32'; }}
       />
     );
   } catch {
-    return <div style={{ width: size, height: size }} className={`bg-gray-200 rounded-full ${className}`} />;
+    return <div style={{ width: size, height: size }} className={cn("bg-gray-200 rounded-full", className)} />;
   }
 };
 
@@ -57,6 +63,7 @@ const App: React.FC = () => {
   const [categories, setCategories] = useState<Category[]>(INITIAL_DATA);
   const [settings, setLocalSettings] = useState<AppSettings>(INITIAL_SETTINGS);
   const [searchEngines, setSearchEngines] = useState<SearchEngine[]>(INITIAL_SEARCH_ENGINES);
+  const [isLoadingData, setIsLoadingData] = useState(true);
   
   const [isEditMode, setIsEditMode] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -67,13 +74,11 @@ const App: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [currentTime, setCurrentTime] = useState<string>('');
   const [aiGreeting, setAiGreeting] = useState<string>('');
-  const [clock, setClock] = useState(new Date()); // State for Clock
+  const [clock, setClock] = useState(new Date()); 
   
   // Modals
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [editingLink, setEditingLink] = useState<{ catId: string, link?: LinkItem } | null>(null);
-  
-  // Custom Confirm Modal State
   const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean; message: string; onConfirm: () => void } | null>(null);
 
   // Link Editor State
@@ -92,21 +97,27 @@ const App: React.FC = () => {
   const [genCount, setGenCount] = useState(4);
   const [isGeneratingLinks, setIsGeneratingLinks] = useState(false);
 
-  // Category Edit State
-  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
-
   // -- Effects --
 
-  // Load Data
+  // Load Data (Async for Cloud Sync)
   useEffect(() => {
-    const savedData = loadCategories();
-    if (savedData) setCategories(savedData);
-    
-    const savedSettings = loadSettings();
-    if (savedSettings) setLocalSettings(savedSettings);
+    const initData = async () => {
+      setIsLoadingData(true);
+      
+      const [savedCats, savedSets, savedEngines] = await Promise.all([
+        loadCategories(),
+        loadSettings(),
+        loadSearchEngines()
+      ]);
 
-    const savedEngines = loadSearchEngines();
-    if (savedEngines) setSearchEngines(savedEngines);
+      if (savedCats) setCategories(savedCats);
+      if (savedSets) setLocalSettings(savedSets);
+      if (savedEngines) setSearchEngines(savedEngines);
+      
+      setIsLoadingData(false);
+    };
+
+    initData();
 
     // Initial greeting time
     const updateTime = () => {
@@ -181,6 +192,7 @@ const App: React.FC = () => {
     e.preventDefault();
     const validPassword = process.env.ADMIN_PASSWORD;
     
+    // If no password set in env, allow access (dev mode)
     if (!validPassword) {
        setIsAuthenticated(true);
        setShowLoginModal(false);
@@ -208,8 +220,7 @@ const App: React.FC = () => {
   };
 
   const handleCategoryNameBlur = async (id: string, title: string) => {
-    setEditingCategoryId(null);
-    // Save locally
+    // Save locally and cloud
     saveCategories(categories);
     
     // AI Icon Generation
@@ -239,7 +250,7 @@ const App: React.FC = () => {
     });
   };
 
-  const handleSaveLink = () => {
+  const handleSaveLink = async () => {
     if (!editingLink || !linkForm.title || !linkForm.url) return;
     
     const newLink: LinkItem = {
@@ -260,7 +271,7 @@ const App: React.FC = () => {
     });
 
     setCategories(newCats);
-    saveCategories(newCats);
+    await saveCategories(newCats);
     setEditingLink(null);
     setLinkForm({});
   };
@@ -304,7 +315,7 @@ const App: React.FC = () => {
       });
 
       setCategories(newCats);
-      saveCategories(newCats);
+      await saveCategories(newCats);
       setShowGenLinksModal(null);
     } catch (e) {
       console.error(e);
@@ -321,7 +332,7 @@ const App: React.FC = () => {
     window.open(url, '_blank');
   };
 
-  const handleSaveEngine = () => {
+  const handleSaveEngine = async () => {
     if (!engineForm.name || !engineForm.searchUrlPattern) return;
     
     const newEngine: SearchEngine = {
@@ -333,7 +344,7 @@ const App: React.FC = () => {
 
     const newEngines = [...searchEngines, newEngine];
     setSearchEngines(newEngines);
-    saveSearchEngines(newEngines);
+    await saveSearchEngines(newEngines);
     setIsAddingEngine(false);
     setEngineForm({});
   };
@@ -343,14 +354,14 @@ const App: React.FC = () => {
           alert("至少保留一个搜索引擎");
           return;
       }
-      const doDelete = () => {
+      const doDelete = async () => {
         const newEngines = searchEngines.filter(e => e.id !== id);
         setSearchEngines(newEngines);
-        saveSearchEngines(newEngines);
+        await saveSearchEngines(newEngines);
         if (settings.activeSearchEngineId === id) {
             const newActive = newEngines[0].id;
-            setLocalSettings({...settings, activeSearchEngineId: newActive});
-            saveSettings({...settings, activeSearchEngineId: newActive});
+            setLocalSettings(prev => ({...prev, activeSearchEngineId: newActive}));
+            await saveSettings({...settings, activeSearchEngineId: newActive});
         }
         setConfirmModal(null);
       };
@@ -390,10 +401,10 @@ const App: React.FC = () => {
             return;
         }
         const reader = new FileReader();
-        reader.onloadend = () => {
+        reader.onloadend = async () => {
             const base64 = reader.result as string;
-            setLocalSettings({...settings, customBackgroundImage: base64});
-            saveSettings({...settings, customBackgroundImage: base64});
+            setLocalSettings(prev => ({...prev, customBackgroundImage: base64}));
+            await saveSettings({...settings, customBackgroundImage: base64});
         };
         reader.readAsDataURL(file);
     }
@@ -403,14 +414,26 @@ const App: React.FC = () => {
       setIsAiLoading(true);
       try {
           const icon = await suggestIcon(settings.appName);
-          setLocalSettings({...settings, appIcon: icon});
-          saveSettings({...settings, appIcon: icon});
+          setLocalSettings(prev => ({...prev, appIcon: icon}));
+          await saveSettings({...settings, appIcon: icon});
       } catch (e) {
           alert("图标生成失败");
       } finally {
           setIsAiLoading(false);
       }
   };
+
+  // Loading Screen
+  if (isLoadingData) {
+    return (
+        <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-slate-950">
+            <div className="flex flex-col items-center gap-4">
+                <div className="w-12 h-12 border-4 border-violet-200 border-t-violet-600 rounded-full animate-spin" />
+                <p className="text-gray-500 animate-pulse">正在从云端同步数据...</p>
+            </div>
+        </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex text-gray-900 dark:text-gray-100 transition-colors duration-300 relative">
@@ -458,10 +481,12 @@ const App: React.FC = () => {
                 全局设置
               </button>
               <button 
-                 onClick={() => {
+                 onClick={async () => {
                    const newId = `cat-${Date.now()}`;
                    const newCat: Category = { id: newId, title: '新分类', icon: 'Folder', links: [] };
-                   setCategories([...categories, newCat]);
+                   const updated = [...categories, newCat];
+                   setCategories(updated);
+                   await saveCategories(updated);
                  }}
                 className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-gray-600 dark:text-gray-300 hover:bg-violet-50 dark:hover:bg-violet-900/20 hover:text-violet-600 transition-colors"
               >
@@ -472,8 +497,12 @@ const App: React.FC = () => {
           </div>
           
           <div className="mt-auto p-6">
-            <div className={`p-4 rounded-xl border flex items-center gap-2 mb-4 text-sm font-medium transition-colors ${kvStatus ? 'bg-green-50 dark:bg-green-900/20 border-green-100 dark:border-green-800 text-green-700 dark:text-green-400' : 'bg-red-50 dark:bg-red-900/20 border-red-100 dark:border-red-800 text-red-700 dark:text-red-400'}`}>
-              <div className={`w-2 h-2 rounded-full ${kvStatus ? 'bg-green-500' : 'bg-red-500'} animate-pulse`} />
+            <div className={cn("p-4 rounded-xl border flex items-center gap-2 mb-4 text-sm font-medium transition-colors", 
+                kvStatus 
+                ? 'bg-green-50 dark:bg-green-900/20 border-green-100 dark:border-green-800 text-green-700 dark:text-green-400' 
+                : 'bg-red-50 dark:bg-red-900/20 border-red-100 dark:border-red-800 text-red-700 dark:text-red-400'
+            )}>
+              <div className={cn("w-2 h-2 rounded-full animate-pulse", kvStatus ? 'bg-green-500' : 'bg-red-500')} />
               {kvStatus ? '已连接 Vercel KV' : '未连接云同步'}
             </div>
             <button 
@@ -506,9 +535,12 @@ const App: React.FC = () => {
             <div className="flex-1" /> {/* Spacer */}
             
             <div className="flex items-center gap-3">
-                {/* Theme Toggle - Visible Always */}
                 <button 
-                    onClick={() => setLocalSettings(s => ({...s, theme: s.theme === 'dark' ? 'light' : 'dark'}))} 
+                    onClick={async () => {
+                         const newTheme = settings.theme === 'dark' ? 'light' : 'dark';
+                         setLocalSettings(prev => ({...prev, theme: newTheme}));
+                         await saveSettings({...settings, theme: newTheme});
+                    }} 
                     className="p-2.5 rounded-full bg-white dark:bg-slate-800 text-gray-600 dark:text-gray-300 shadow-sm border border-gray-100 dark:border-white/10 hover:bg-gray-50 transition-colors"
                 >
                     {settings.theme === 'dark' ? <Sun size={20}/> : <Moon size={20}/>}
@@ -550,7 +582,6 @@ const App: React.FC = () => {
               {/* Search Bar Container */}
               <div className="mt-4 w-full max-w-3xl mx-auto group">
                 <form onSubmit={handleSearch} className="relative flex items-center p-2 glass-panel rounded-2xl transition-all group-focus-within:ring-2 ring-violet-500/50 shadow-lg shadow-violet-500/5">
-                  {/* Active Search Engine Logo - No Dropdown */}
                   <div className="flex items-center justify-center pl-3 pr-2 border-r border-gray-200 dark:border-white/10 mr-2">
                      <Favicon url={activeSearchEngine.baseUrl} size={24} className="shadow-sm" />
                   </div>
@@ -566,21 +597,20 @@ const App: React.FC = () => {
                   </button>
                 </form>
 
-                {/* Search Engine Quick Toggles (Icons Only for cleaner look, clickable manually) */}
                 <div className="flex flex-wrap justify-center gap-3 mt-6">
                   {searchEngines.map(engine => (
                     <button
                       key={engine.id}
-                      onClick={() => {
-                          setLocalSettings({...settings, activeSearchEngineId: engine.id});
-                          saveSettings({...settings, activeSearchEngineId: engine.id});
+                      onClick={async () => {
+                          setLocalSettings(prev => ({...prev, activeSearchEngineId: engine.id}));
+                          await saveSettings({...settings, activeSearchEngineId: engine.id});
                       }}
-                      className={`
-                        flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all text-xs font-medium
-                        ${settings.activeSearchEngineId === engine.id 
+                      className={cn(
+                        "flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all text-xs font-medium",
+                        settings.activeSearchEngineId === engine.id 
                             ? 'bg-violet-100 text-violet-700 border-violet-200 dark:bg-violet-900/30 dark:text-violet-300 dark:border-violet-700 shadow-sm' 
-                            : 'bg-transparent text-gray-500 border-transparent hover:bg-gray-100 dark:hover:bg-white/5'}
-                      `}
+                            : 'bg-transparent text-gray-500 border-transparent hover:bg-gray-100 dark:hover:bg-white/5'
+                      )}
                     >
                       <Favicon url={engine.baseUrl} size={14} className="rounded-sm" />
                       {engine.name}
@@ -600,7 +630,7 @@ const App: React.FC = () => {
           {/* Link Categories */}
           <div className="space-y-8 pb-20">
             {categories.map((category) => (
-              <div key={category.id} className={`${isEditMode ? 'glass-panel p-6 rounded-3xl' : ''} transition-all duration-300`}>
+              <div key={category.id} className={cn(isEditMode ? 'glass-panel p-6 rounded-3xl' : '', 'transition-all duration-300')}>
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-3 flex-1">
                     {isEditMode ? <Icon name={category.icon} className="text-gray-800 dark:text-white" /> : <Icon name={category.icon} className="text-yellow-500 dark:text-yellow-400" />}
@@ -626,10 +656,10 @@ const App: React.FC = () => {
                          <Wand2 size={14} /> AI 填充
                        </button>
                        <button 
-                        onClick={() => {
+                        onClick={async () => {
                           const newCats = categories.filter(c => c.id !== category.id);
                           setCategories(newCats);
-                          saveCategories(newCats);
+                          await saveCategories(newCats);
                         }}
                         className="p-2 text-gray-400 hover:text-red-500 transition-colors"
                       >
@@ -644,10 +674,10 @@ const App: React.FC = () => {
                     <div 
                       key={link.id}
                       onClick={() => !isEditMode && window.open(link.url, settings.openInNewTab ? '_blank' : '_self')}
-                      className={`
-                        relative group flex items-start gap-4 p-4 rounded-2xl transition-all duration-300
-                        ${isEditMode ? 'bg-gray-50 dark:bg-slate-800/50 border border-gray-200 dark:border-white/5 cursor-move' : 'bg-white dark:bg-slate-800 hover:shadow-xl hover:-translate-y-1 cursor-pointer border border-transparent hover:border-violet-100 dark:hover:border-violet-900/30'}
-                      `}
+                      className={cn(
+                        "relative group flex items-start gap-4 p-4 rounded-2xl transition-all duration-300",
+                        isEditMode ? 'bg-gray-50 dark:bg-slate-800/50 border border-gray-200 dark:border-white/5 cursor-move' : 'bg-white dark:bg-slate-800 hover:shadow-xl hover:-translate-y-1 cursor-pointer border border-transparent hover:border-violet-100 dark:hover:border-violet-900/30'
+                      )}
                     >
                       <Favicon url={link.url} />
                       <div className="flex-1 min-w-0">
@@ -809,19 +839,28 @@ const App: React.FC = () => {
             <div className="flex items-center gap-1 p-1 bg-gray-100 dark:bg-slate-900/50 rounded-xl mb-6 mx-6 mt-2">
                 <button 
                     onClick={() => setActiveSettingsTab('general')}
-                    className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-2 ${activeSettingsTab === 'general' ? 'bg-white dark:bg-slate-800 shadow-sm text-violet-600' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'}`}
+                    className={cn(
+                        "flex-1 py-2 text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-2",
+                        activeSettingsTab === 'general' ? 'bg-white dark:bg-slate-800 shadow-sm text-violet-600' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+                    )}
                 >
                     <TypeIcon size={16} /> 站点信息
                 </button>
                 <button 
                     onClick={() => setActiveSettingsTab('appearance')}
-                    className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-2 ${activeSettingsTab === 'appearance' ? 'bg-white dark:bg-slate-800 shadow-sm text-violet-600' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'}`}
+                    className={cn(
+                        "flex-1 py-2 text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-2",
+                        activeSettingsTab === 'appearance' ? 'bg-white dark:bg-slate-800 shadow-sm text-violet-600' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+                    )}
                 >
                     <Palette size={16} /> 外观定制
                 </button>
                 <button 
                     onClick={() => setActiveSettingsTab('search')}
-                    className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-2 ${activeSettingsTab === 'search' ? 'bg-white dark:bg-slate-800 shadow-sm text-violet-600' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'}`}
+                    className={cn(
+                        "flex-1 py-2 text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-2",
+                        activeSettingsTab === 'search' ? 'bg-white dark:bg-slate-800 shadow-sm text-violet-600' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+                    )}
                 >
                     <Search size={16} /> 搜索引擎
                 </button>
@@ -837,10 +876,10 @@ const App: React.FC = () => {
                                 <input 
                                     type="text" 
                                     value={settings.appName}
-                                    onChange={(e) => {
+                                    onChange={async (e) => {
                                         const val = e.target.value;
-                                        setLocalSettings({...settings, appName: val});
-                                        saveSettings({...settings, appName: val});
+                                        setLocalSettings(prev => ({...prev, appName: val}));
+                                        await saveSettings({...settings, appName: val});
                                     }}
                                     className="w-full p-3 rounded-xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-slate-900 focus:ring-2 focus:ring-violet-500 outline-none"
                                 />
@@ -856,10 +895,10 @@ const App: React.FC = () => {
                                         <input 
                                             type="text" 
                                             value={settings.appIcon}
-                                            onChange={(e) => {
+                                            onChange={async (e) => {
                                                 const val = e.target.value;
-                                                setLocalSettings({...settings, appIcon: val});
-                                                saveSettings({...settings, appIcon: val});
+                                                setLocalSettings(prev => ({...prev, appIcon: val}));
+                                                await saveSettings({...settings, appIcon: val});
                                             }}
                                             className="flex-1 bg-transparent border-none outline-none font-mono text-sm"
                                             placeholder="e.g. Zap, Home, Star"
@@ -887,23 +926,28 @@ const App: React.FC = () => {
                             <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">背景风格</h3>
                             <div className="grid grid-cols-3 gap-3">
                                 {[
-                                    { id: 'aurora', name: '极光流体', icon: <Layers size={20} className="text-blue-500" /> },
+                                    { id: 'aurora', name: '极光流体', icon: <div className="w-5 h-5 rounded bg-gradient-to-br from-violet-500 to-blue-500" /> },
                                     { id: 'monotone', name: '纯净单色', icon: <div className="w-5 h-5 bg-gray-300 rounded-full" /> },
                                     { id: 'custom', name: '自定义壁纸', icon: <ImageIcon size={20} className="text-violet-500" /> }
                                 ].map(mode => (
                                     <button
                                         key={mode.id}
-                                        onClick={() => {
+                                        onClick={async () => {
                                             const newSettings = { ...settings, backgroundMode: mode.id as any };
                                             setLocalSettings(newSettings);
-                                            saveSettings(newSettings);
+                                            await saveSettings(newSettings);
                                         }}
-                                        className={`flex flex-col items-center gap-3 p-4 rounded-xl border-2 transition-all ${settings.backgroundMode === mode.id ? 'border-violet-500 bg-violet-50 dark:bg-violet-900/20' : 'border-gray-100 dark:border-white/5 hover:bg-gray-50 dark:hover:bg-white/5'}`}
+                                        className={cn(
+                                            "flex flex-col items-center gap-3 p-4 rounded-xl border-2 transition-all",
+                                            settings.backgroundMode === mode.id 
+                                            ? 'border-violet-500 bg-violet-50 dark:bg-violet-900/20' 
+                                            : 'border-gray-100 dark:border-white/5 hover:bg-gray-50 dark:hover:bg-white/5'
+                                        )}
                                     >
                                         <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
                                             {mode.icon}
                                         </div>
-                                        <span className={`text-xs font-bold ${settings.backgroundMode === mode.id ? 'text-violet-700 dark:text-violet-300' : 'text-gray-600 dark:text-gray-400'}`}>{mode.name}</span>
+                                        <span className={cn("text-xs font-bold", settings.backgroundMode === mode.id ? 'text-violet-700 dark:text-violet-300' : 'text-gray-600 dark:text-gray-400')}>{mode.name}</span>
                                     </button>
                                 ))}
                             </div>
@@ -917,10 +961,10 @@ const App: React.FC = () => {
                                      type="text" 
                                      placeholder="输入图片 URL..." 
                                      value={settings.customBackgroundImage || ''}
-                                     onChange={(e) => {
+                                     onChange={async (e) => {
                                          const val = e.target.value;
-                                         setLocalSettings({...settings, customBackgroundImage: val});
-                                         saveSettings({...settings, customBackgroundImage: val});
+                                         setLocalSettings(prev => ({...prev, customBackgroundImage: val}));
+                                         await saveSettings({...settings, customBackgroundImage: val});
                                      }}
                                      className="w-full p-2.5 rounded-lg border border-gray-200 dark:border-white/10 dark:bg-slate-800 text-sm focus:ring-2 focus:ring-violet-500 outline-none"
                                  />
@@ -949,10 +993,10 @@ const App: React.FC = () => {
                             <input 
                             type="range" min="0" max="100" 
                             value={settings.cardOpacity} 
-                            onChange={(e) => {
+                            onChange={async (e) => {
                                 const val = parseInt(e.target.value);
-                                setLocalSettings({...settings, cardOpacity: val});
-                                saveSettings({...settings, cardOpacity: val});
+                                setLocalSettings(prev => ({...prev, cardOpacity: val}));
+                                await saveSettings({...settings, cardOpacity: val});
                             }}
                             className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-violet-600"
                             />
@@ -990,7 +1034,6 @@ const App: React.FC = () => {
                             </button>
                         ) : (
                             <div className="p-4 bg-violet-50 dark:bg-violet-900/10 rounded-xl border border-violet-100 dark:border-violet-900/20 space-y-3 animate-fade-in">
-                                {/* ... Engine Adding Form ... */}
                                 <div className="flex gap-2">
                                     <input 
                                         type="text" 
