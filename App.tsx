@@ -143,23 +143,31 @@ const App: React.FC = () => {
 
       // 2. Sync from Cloud Background
       if (isKVConfigured()) {
-          addLog('info', "Syncing from cloud...");
-          const [cloudCats, cloudSets, cloudEngines] = await Promise.all([
-            syncCategoriesFromCloud(),
-            syncSettingsFromCloud(),
-            syncSearchEnginesFromCloud()
-          ]);
-          
-          if (cloudCats) setCategories(cloudCats);
-          if (cloudSets) {
-             // Ensure AI configs exist
-             if (!cloudSets.aiConfigs || cloudSets.aiConfigs.length === 0) {
-                 cloudSets.aiConfigs = INITIAL_SETTINGS.aiConfigs;
-             }
-             setLocalSettings(cloudSets);
+          addLog('info', "Found Vercel KV config. Syncing...");
+          try {
+              const [cloudCats, cloudSets, cloudEngines] = await Promise.all([
+                syncCategoriesFromCloud(),
+                syncSettingsFromCloud(),
+                syncSearchEnginesFromCloud()
+              ]);
+              
+              if (cloudCats) setCategories(cloudCats);
+              if (cloudSets) {
+                 // Ensure AI configs exist
+                 if (!cloudSets.aiConfigs || cloudSets.aiConfigs.length === 0) {
+                     cloudSets.aiConfigs = INITIAL_SETTINGS.aiConfigs;
+                 }
+                 setLocalSettings(cloudSets);
+              }
+              if (cloudEngines) setSearchEngines(cloudEngines);
+              addLog('info', "Cloud sync complete");
+          } catch (e) {
+              addLog('error', `Cloud sync failed: ${e}`);
           }
-          if (cloudEngines) setSearchEngines(cloudEngines);
-          addLog('info', "Cloud sync complete");
+      } else {
+          addLog('warn', "Vercel KV not configured.");
+          if (!process.env.KV_REST_API_URL) addLog('warn', "Missing Env: KV_REST_API_URL");
+          if (!process.env.KV_REST_API_TOKEN) addLog('warn', "Missing Env: KV_REST_API_TOKEN");
       }
     };
 
@@ -1233,7 +1241,6 @@ const App: React.FC = () => {
                     </div>
                 )}
 
-                {/* ... other tabs ... */}
                 {activeSettingsTab === 'appearance' && (
                     <div className="space-y-6 animate-fade-in">
                         <section>

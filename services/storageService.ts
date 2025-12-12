@@ -14,7 +14,10 @@ export const isKVConfigured = (): boolean => {
 // --- Cloud Sync Helpers (Vercel KV REST API) ---
 
 const kvFetch = async (command: string, key: string, value?: any) => {
-  if (!isKVConfigured()) return null;
+  if (!isKVConfigured()) {
+      // Don't spam logs here, App.tsx handles the initial missing config warning.
+      return null;
+  }
 
   const baseUrl = process.env.KV_REST_API_URL?.replace(/\/$/, '');
   const url = `${baseUrl}/`;
@@ -32,13 +35,16 @@ const kvFetch = async (command: string, key: string, value?: any) => {
     });
 
     if (!response.ok) {
-        // Silent fail for logs to avoid spamming UI during simple syncs
-        console.error(`KV HTTP Error: ${response.status}`);
+        const errorText = await response.text().catch(() => 'Unknown Error');
+        addLog('error', `KV Sync Error (${response.status}): ${errorText.substring(0, 100)}`);
         return null;
     }
 
     const result = await response.json();
-    if (result.error) return null;
+    if (result.error) {
+        addLog('error', `KV Command Error: ${result.error}`);
+        return null;
+    }
 
     if (result.result) {
        try {
@@ -49,7 +55,8 @@ const kvFetch = async (command: string, key: string, value?: any) => {
     }
     return null;
   } catch (error) {
-    console.error(`KV Fetch Exception:`, error);
+    const msg = (error as any)?.message || String(error);
+    addLog('error', `KV Network Exception: ${msg}`);
     return null;
   }
 };
