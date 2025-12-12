@@ -6,7 +6,20 @@ const ENGINES_KEY = 'aurora_engines_v1';
 
 // Helper to check if KV is configured
 export const isKVConfigured = (): boolean => {
-  return !!(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
+  const url = process.env.KV_REST_API_URL;
+  const token = process.env.KV_REST_API_TOKEN;
+  
+  const isConfigured = !!(url && token);
+  
+  if (!isConfigured) {
+    console.log("KV Sync Status: Not Configured. Check Vercel Storage settings.");
+    // Debug helper: un-comment to check values in production console if needed (be careful with secrets)
+    // console.log("KV URL:", url ? "Set" : "Missing", "KV Token:", token ? "Set" : "Missing");
+  } else {
+    // console.log("KV Sync Status: Connected.");
+  }
+  
+  return isConfigured;
 };
 
 // --- Cloud Sync Helpers (Vercel KV REST API) ---

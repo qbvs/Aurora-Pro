@@ -1,18 +1,23 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { AIResponse, LinkItem } from "../types";
 
-// Initialize the API client
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+// Helper to get client instance safely
+const getAiClient = () => {
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) {
+    console.error("Gemini API Key is missing! Check your Vercel Environment Variables.");
+    return null;
+  }
+  return new GoogleGenAI({ apiKey });
+};
 
 export const analyzeUrl = async (url: string): Promise<AIResponse> => {
-  if (!process.env.API_KEY) {
-    console.warn("No API Key found. Returning mock data.");
-    const isSearch = url.includes('bing') || url.includes('google') || url.includes('baidu');
+  const ai = getAiClient();
+  if (!ai) {
     return {
-      title: isSearch ? "Search Engine" : "新链接",
-      description: "暂无描述",
-      brandColor: "#cccccc",
-      searchUrlPattern: isSearch ? `${url}/search?q=` : undefined
+      title: "API Key 未配置",
+      description: "请在 Vercel 设置 API_KEY",
+      brandColor: "#cccccc"
     };
   }
 
@@ -52,16 +57,18 @@ export const analyzeUrl = async (url: string): Promise<AIResponse> => {
 
   } catch (error) {
     console.error("AI Analysis failed:", error);
+    // Return safe fallback instead of throwing to prevent app crash
     return {
-      title: "新链接",
-      description: "暂无描述",
+      title: "识别失败",
+      description: "AI 暂时无法访问",
       brandColor: "#cccccc"
     };
   }
 };
 
 export const generateCategoryLinks = async (categoryTitle: string, count: number): Promise<Partial<LinkItem>[]> => {
-  if (!process.env.API_KEY) return [];
+  const ai = getAiClient();
+  if (!ai) return [];
 
   try {
     const prompt = `
@@ -105,7 +112,8 @@ export const generateCategoryLinks = async (categoryTitle: string, count: number
 };
 
 export const getAiGreeting = async (): Promise<string> => {
-  if (!process.env.API_KEY) return "";
+  const ai = getAiClient();
+  if (!ai) return "";
   
   try {
     const prompt = `
@@ -129,7 +137,8 @@ export const getAiGreeting = async (): Promise<string> => {
 };
 
 export const suggestIcon = async (text: string): Promise<string> => {
-  if (!process.env.API_KEY) return "Sparkles"; // Default fallback
+  const ai = getAiClient();
+  if (!ai) return "Sparkles";
 
   try {
     const prompt = `
@@ -144,7 +153,6 @@ export const suggestIcon = async (text: string): Promise<string> => {
     });
     
     const iconName = response.text?.trim().replace(/['"`]/g, '') || "Sparkles";
-    // Basic validation to ensure it looks like a name
     return iconName.split(' ')[0];
   } catch (e) {
     console.error("Icon suggestion failed", e);
