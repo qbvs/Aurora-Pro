@@ -5,16 +5,43 @@ import { INITIAL_SETTINGS } from "../constants";
 
 // --- Helpers ---
 
+// CRITICAL FIX: Vite replaces process.env.VAR statically at build time.
+// We cannot access them dynamically like process.env[key].
+// We must map them explicitly.
+const getEnvValue = (key?: string): string => {
+    if (!key) return '';
+    switch (key) {
+        case 'CUSTOM_API_KEY_1': return process.env.CUSTOM_API_KEY_1 || '';
+        case 'CUSTOM_API_KEY_2': return process.env.CUSTOM_API_KEY_2 || '';
+        case 'CUSTOM_API_KEY_3': return process.env.CUSTOM_API_KEY_3 || '';
+        case 'CUSTOM_API_KEY_4': return process.env.CUSTOM_API_KEY_4 || '';
+        case 'CUSTOM_API_KEY_5': return process.env.CUSTOM_API_KEY_5 || '';
+        case 'API_KEY': return process.env.API_KEY || '';
+        default: return '';
+    }
+};
+
 // Get the actual API Key (resolving Env Slots if necessary)
 const resolveApiKey = (config: AIProviderConfig): string => {
-    if (config.envSlot && (process.env as any)[config.envSlot]) {
-        return (process.env as any)[config.envSlot];
+    // 1. If "Environment Variable" mode is selected (envSlot is set)
+    if (config.envSlot) {
+        const val = getEnvValue(config.envSlot);
+        if (val) return val;
+        // If selected slot is empty, fall through? No, explicit selection should fail or return empty.
+        return ''; 
     }
-    // Fallback to manual key or default google key
-    if (config.type === 'google' && (!config.apiKey || config.apiKey.trim() === '')) {
+    
+    // 2. If "Manual" mode (envSlot is undefined/null), use the manually entered apiKey
+    if (config.apiKey && config.apiKey.trim() !== '') {
+        return config.apiKey;
+    }
+
+    // 3. Fallback for default Google config only
+    if (config.type === 'google') {
         return process.env.API_KEY || '';
     }
-    return config.apiKey || '';
+
+    return '';
 };
 
 // Get the active configuration
@@ -54,13 +81,16 @@ export interface TestResult {
 
 export const testAiConnection = async (config: AIProviderConfig): Promise<TestResult> => {
     try {
-        let apiKey = config.apiKey;
-        if (!apiKey && config.envSlot) {
-             apiKey = (process.env as any)[config.envSlot] || '';
-        }
-        if (config.type === 'google' && !apiKey) apiKey = process.env.API_KEY || '';
+        // Use the same resolution logic as the main app
+        const apiKey = resolveApiKey(config);
 
-        if (!apiKey) return { success: false, message: '未配置 API Key' };
+        if (!apiKey) {
+            // Detailed debugging for user
+            if (config.envSlot) {
+                return { success: false, message: `环境变量 ${config.envSlot} 为空或未读取到 (请检查 Vercel 变量设置并 Redeploy)` };
+            }
+            return { success: false, message: 'API Key 为空' };
+        }
 
         if (config.type === 'google') {
             const ai = new GoogleGenAI({ apiKey });
@@ -89,7 +119,7 @@ export const testAiConnection = async (config: AIProviderConfig): Promise<TestRe
                 }
                 
                 if (response.status === 401 || response.status === 403) {
-                     return { success: false, message: `鉴权失败 (${response.status})` };
+                     return { success: false, message: `鉴权失败 (${response.status}) - 请检查密钥` };
                 }
             } catch (netErr) {
                  addLog('warn', `Model list network error: ${netErr}`);
@@ -141,10 +171,7 @@ export const testAiConnection = async (config: AIProviderConfig): Promise<TestRe
 
 export const fetchAiModels = async (config: AIProviderConfig): Promise<string[]> => {
     try {
-        let apiKey = config.apiKey;
-        if (!apiKey && config.envSlot) apiKey = (process.env as any)[config.envSlot] || '';
-        if (config.type === 'google' && !apiKey) apiKey = process.env.API_KEY || '';
-
+        const apiKey = resolveApiKey(config);
         if (!apiKey) return [];
 
         if (config.type === 'google') {
