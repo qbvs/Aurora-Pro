@@ -26,6 +26,23 @@
 
 ---
 
+## ⚠️ 重要：关于 AI 功能的 API 使用额度 (API Quota)
+
+Aurora Pro 的许多核心功能都依赖于 Google Gemini AI。Google 对其 API 提供了免费套餐，但**免费额度非常有限**（例如，gemini-2.5-flash 模型每天仅有约 20 次的请求额度）。
+
+当您频繁使用“AI识别”、“AI填充”等功能后，很快就会遇到 `Quota Exceeded` (额度超限) 的错误，导致 AI 功能暂时失效。
+
+**为了确保所有 AI 功能稳定、不间断地运行，强烈建议您为您的 Google API Key 启用结算功能。**
+
+*   **如何启用？**
+    1.  访问 [Google Cloud Billing](https://console.cloud.google.com/billing)。
+    2.  选择您的 API Key 所属的项目。
+    3.  为其关联一个有效的付款账号。
+*   **会很贵吗？**
+    *   不会。对于个人使用场景，API 的调用费用非常低廉，通常每月仅需几美分甚至更少，但能将您的使用额度提升成千上万倍。
+
+---
+
 ## 🚀 部署指南 (Vercel)
 
 只需 5 分钟，即可拥有属于您的 Aurora Pro。
@@ -33,6 +50,7 @@
 ### 第一步：获取 AI 密钥
 1.  前往 [Google AI Studio](https://aistudio.google.com/)。
 2.  点击 "Get API Key" 创建并复制您的密钥。
+3.  **（推荐）** 前往 [Google Cloud Billing](https://console.cloud.google.com/billing) 为您的项目启用结算，以避免额度限制。
 
 ### 第二步：一键部署
 点击页面顶部的 **"Deploy with Vercel"** 按钮：

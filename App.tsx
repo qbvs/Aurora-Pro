@@ -60,6 +60,8 @@ const Favicon = ({ url, size = 32, className }: { url: string, size?: number, cl
   }
 };
 
+const QUOTA_EXCEEDED_MESSAGE = 'AI 免费额度已用尽。\n\n这是 Google API 的限制，不是程序错误。请为您的 Google AI 账户启用结算以解除限制，或等待明天额度刷新。';
+
 // --- Main App Component ---
 
 const App: React.FC = () => {
@@ -240,7 +242,7 @@ const App: React.FC = () => {
     // Save locally and cloud
     saveCategories(categories);
     
-    // AI Icon Generation
+    // AI Icon Generation (fail silently)
     try {
         const icon = await suggestIcon(title);
         const newCats = categories.map(cat => cat.id === id ? { ...cat, icon: icon } : cat);
@@ -305,8 +307,17 @@ const App: React.FC = () => {
         color: data.brandColor
       }));
     } catch (e) {
-      console.error(e);
-      alert('AI 识别失败，请查看系统诊断日志');
+      if ((e as Error).message === 'QUOTA_EXCEEDED') {
+        alert(QUOTA_EXCEEDED_MESSAGE);
+      } else {
+        alert('AI 识别失败，请查看系统诊断日志');
+        setLinkForm(prev => ({
+            ...prev,
+            title: "识别失败",
+            description: "AI 暂时无法访问",
+            color: "#cccccc"
+        }));
+      }
     } finally {
       setIsAiLoading(false);
     }
@@ -318,11 +329,11 @@ const App: React.FC = () => {
     try {
       const newLinksData = await generateCategoryLinks(showGenLinksModal.title, genCount);
       
-      // CRITICAL FIX: If AI fails and returns empty array, DO NOT CLOSE MODAL.
       if (!newLinksData || newLinksData.length === 0) {
-        alert("AI 生成未能返回结果。请转到「全局设置 -> 系统诊断」查看错误日志。这通常是因为 API Key 无效或 Vercel 环境变量未正确同步。");
-        setIsGeneratingLinks(false);
-        return; // Stop here
+        // This case is now handled by the QUOTA_EXCEEDED check below,
+        // but as a fallback, we keep this alert.
+        alert("AI 生成未能返回结果。请转到「全局设置 -> 系统诊断」查看错误日志。");
+        return;
       }
 
       const newLinks: LinkItem[] = newLinksData.map((l, i) => ({
@@ -342,8 +353,11 @@ const App: React.FC = () => {
       await saveCategories(newCats);
       setShowGenLinksModal(null);
     } catch (e) {
-      console.error(e);
-      alert('AI 生成过程发生错误，请查看系统诊断');
+      if ((e as Error).message === 'QUOTA_EXCEEDED') {
+        alert(QUOTA_EXCEEDED_MESSAGE);
+      } else {
+        alert('AI 生成过程发生错误，请查看系统诊断日志');
+      }
     } finally {
       setIsGeneratingLinks(false);
     }
@@ -411,7 +425,11 @@ const App: React.FC = () => {
               alert('AI 未能自动识别搜索串，请手动填写 (例如: https://.../search?q=)');
           }
       } catch (e) {
-          console.error(e);
+        if ((e as Error).message === 'QUOTA_EXCEEDED') {
+          alert(QUOTA_EXCEEDED_MESSAGE);
+        } else {
+          alert('AI 识别失败，请查看系统诊断日志');
+        }
       } finally {
           setIsAiLoading(false);
       }

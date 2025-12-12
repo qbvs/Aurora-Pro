@@ -12,15 +12,20 @@ const getAiClient = () => {
   return new GoogleGenAI({ apiKey });
 };
 
+const handleApiError = (error: any, context: string): never => {
+    const errorMessage = (error as any)?.message || '';
+    addLog('error', `AI ${context} failed: ${error}`);
+    if (errorMessage.includes('"code":429') || errorMessage.includes('RESOURCE_EXHAUSTED')) {
+        throw new Error('QUOTA_EXCEEDED');
+    }
+    throw error;
+};
+
 export const analyzeUrl = async (url: string): Promise<AIResponse> => {
   addLog('info', `AI Analyzing URL: ${url}`);
   const ai = getAiClient();
   if (!ai) {
-    return {
-      title: "API Key 未配置",
-      description: "请在 Vercel 设置 API_KEY",
-      brandColor: "#cccccc"
-    };
+    throw new Error("API Key not configured");
   }
 
   try {
@@ -59,12 +64,7 @@ export const analyzeUrl = async (url: string): Promise<AIResponse> => {
     return JSON.parse(text) as AIResponse;
 
   } catch (error) {
-    addLog('error', `AI Analysis failed for ${url}: ${error}`);
-    return {
-      title: "识别失败",
-      description: "AI 暂时无法访问，请查看系统诊断日志",
-      brandColor: "#cccccc"
-    };
+    handleApiError(error, 'Analysis');
   }
 };
 
@@ -114,8 +114,7 @@ export const generateCategoryLinks = async (categoryTitle: string, count: number
     return result;
 
   } catch (error) {
-    addLog('error', `AI Generation failed: ${error}`);
-    return [];
+     handleApiError(error, 'Link Generation');
   }
 };
 
@@ -139,8 +138,8 @@ export const getAiGreeting = async (): Promise<string> => {
     
     return response.text?.trim() || "";
   } catch (e) {
-    // Silent fail for greeting is okay, but log it
-    // addLog('warn', `Greeting failed: ${e}`);
+    // Greeting failure is non-critical, so we just log it silently and don't bother the user.
+    addLog('warn', `AI Greeting failed (non-critical): ${e}`);
     return "";
   }
 };
@@ -164,7 +163,9 @@ export const suggestIcon = async (text: string): Promise<string> => {
     const iconName = response.text?.trim().replace(/['"`]/g, '') || "Sparkles";
     return iconName.split(' ')[0];
   } catch (e) {
-    addLog('error', `Icon suggestion failed: ${e}`);
+    // We don't throw QUOTA_EXCEEDED here because it's a background task. 
+    // Failing silently is better than interrupting the user's typing.
+    addLog('warn', `Icon suggestion failed (non-critical): ${e}`);
     return "Sparkles";
   }
 };
