@@ -101,6 +101,9 @@ const App: React.FC = () => {
 
   // Load Data (Async for Cloud Sync)
   useEffect(() => {
+    // Debug log to confirm deployment version
+    console.log("Aurora Pro: App Initialized v1.1.0 (Fixed ImportMap)");
+
     const initData = async () => {
       setIsLoadingData(true);
       

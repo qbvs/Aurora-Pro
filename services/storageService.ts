@@ -9,14 +9,12 @@ export const isKVConfigured = (): boolean => {
   const url = process.env.KV_REST_API_URL;
   const token = process.env.KV_REST_API_TOKEN;
   
-  const isConfigured = !!(url && token);
+  // Strict check for non-empty strings
+  const isConfigured = !!(url && url.length > 0 && token && token.length > 0);
   
   if (!isConfigured) {
-    console.log("KV Sync Status: Not Configured. Check Vercel Storage settings.");
-    // Debug helper: un-comment to check values in production console if needed (be careful with secrets)
-    // console.log("KV URL:", url ? "Set" : "Missing", "KV Token:", token ? "Set" : "Missing");
-  } else {
-    // console.log("KV Sync Status: Connected.");
+    // Only log once or in dev to avoid spam, but here we keep it simple for debugging
+    // console.log("KV Sync Status: Not Configured.");
   }
   
   return isConfigured;
@@ -27,7 +25,9 @@ export const isKVConfigured = (): boolean => {
 const kvFetch = async (command: string, key: string, value?: any) => {
   if (!isKVConfigured()) return null;
 
-  const url = `${process.env.KV_REST_API_URL}/`;
+  // Safe URL handling: remove trailing slash if present to avoid double slash
+  const baseUrl = process.env.KV_REST_API_URL?.replace(/\/$/, '');
+  const url = `${baseUrl}/`;
   const token = process.env.KV_REST_API_TOKEN;
 
   try {
