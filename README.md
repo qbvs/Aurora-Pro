@@ -13,13 +13,6 @@
 
 > Aurora Pro 将您的浏览器起始页，从一个简单的链接集合，转变为一个智能、高效且赏心悦目的个人工作空间。它不仅是工具，更是您数字生活的美学延伸。
 
-<br/>
-
-<div align="center">
-  <!-- 您可以在此处替换为您的项目截图 -->
-  <img src="https://raw.githubusercontent.com/Mar-ct/Aurora-pro/main/assets/preview.png" alt="Aurora Pro Preview" width="800"/>
-</div>
-
 ---
 
 ## ✨ 核心功能 (Core Features)
@@ -58,7 +51,7 @@
 
 ---
 
-## 🚀 Vercel 部署完全指南 (保姆级教程)
+## 🚀 Vercel 部署完全指南 (保姆级文字教程)
 
 只需四步，即可拥有一个功能完整的私有 AI 导航站。
 
@@ -86,39 +79,32 @@
 
 ---
 
-### ✅ 第二步：创建并连接云数据库 (Vercel KV) - **关键步骤**
+### ✅ 第二步：创建并连接云数据库 (Vercel KV) - 关键步骤
 
 为了让您的导航数据能够在所有设备间同步，此步骤**至关重要**。我们将引导您完成每一个点击。
 
-1.  **进入 Storage 页面**
-    -   项目部署成功后，您会自动进入 Vercel 的项目控制台。在顶部导航栏中找到并点击 **Storage** 标签页。
-    <br/><br/>
-    <img src="https://raw.githubusercontent.com/Mar-ct/Aurora-pro/main/assets/guide-1.png" width="600" alt="Vercel Storage Tab"/>
-    <br/><br/>
+1.  **进入 Storage 页面**:
+    *   项目部署成功后，您会自动进入 Vercel 的项目控制台。
+    *   在顶部导航栏中找到并点击 **`Storage`** 标签页 (通常在 `Deployments` 和 `Logs` 之间)。
 
-2.  **选择 KV 数据库**
-    -   在 Storage 页面，您会看到 Vercel 提供的几种存储选项。请找到 **KV (Durable Redis)** 这一项，并点击它右侧的 **`Connect Store`** 按钮。
-    <br/><br/>
-    <img src="https://raw.githubusercontent.com/Mar-ct/Aurora-pro/main/assets/guide-2.png" width="600" alt="Select KV Store"/>
-    <br/><br/>
+2.  **选择 KV 数据库**:
+    *   在 Storage 页面，您会看到 Vercel 提供的几种存储选项。
+    *   请找到 **`KV (Durable Redis)`** 这一项。
+    *   点击它右侧的 **`Connect Store`** 按钮。
 
-3.  **创建数据库**
-    -   在弹出的创建窗口中，您**无需修改任何内容**。Vercel 已经为您自动生成了数据库名称并选择了免费套餐。
-    -   直接点击右下角黑色的 **`Create`** 按钮。
-    <br/><br/>
-    <img src="https://raw.githubusercontent.com/Mar-ct/Aurora-pro/main/assets/guide-3.png" width="600" alt="Create Database"/>
-    <br/><br/>
+3.  **创建数据库**:
+    *   此时会弹出一个创建数据库的窗口。
+    *   **您无需修改任何内容**。Vercel 已经为您自动生成了数据库名称并选择了免费套餐。
+    *   直接滚动到底部，点击右下角黑色的 **`Create`** 按钮。
 
-4.  **连接到项目 (最关键！)**
-    -   创建成功后，Vercel 会立即显示一个 **"Connect to Project"** 的界面。
-    -   在这个界面，请**确保**您的 `aurora-pro` (或您自定义的仓库名) 项目被选中。
-    -   然后点击蓝色的 **`Connect`** 按钮。
-    <br/><br/>
-    <img src="https://raw.githubusercontent.com/Mar-ct/Aurora-pro/main/assets/guide-4.png" width="600" alt="Connect Project"/>
-    <br/><br/>
+4.  **连接到项目 (最关键！)**:
+    *   创建成功后，Vercel 会立即显示一个 **"Connect to Project"** 的界面。
+    *   在这个界面，请**确保**您的 `aurora-pro` (或您自定义的仓库名) 项目被选中。
+    *   然后点击蓝色的 **`Connect`** 按钮。
 
-5.  **自动配置完成**
-    -   恭喜！Vercel 已经自动将云同步所需的所有环境变量 (`KV_REST_API_URL` 等) 添加到了您的项目中。**您无需手动进行任何复制粘贴**。
+5.  **自动配置完成**:
+    *   恭喜！Vercel 已经自动将云同步所需的所有环境变量 (`KV_REST_API_URL` 等) 添加到了您的项目中。
+    *   **您无需手动进行任何复制粘贴**。现在可以继续下一步了。
 
 ---
 
@@ -126,15 +112,18 @@
 
 Vercel 不会自动将新连接的数据库密钥应用到旧的部署中。您**必须**手动触发一次 **Redeploy** (重新部署)，让新设置生效。
 
-1.  回到项目的 **Deployments** (部署) 标签页。
-2.  找到最新的一条部署记录 (通常在最顶部)。
-3.  点击其右侧的 **`...`** 菜单。
-4.  选择 **Redeploy**。
-    <br/><br/>
-    <img src="https://raw.githubusercontent.com/Mar-ct/Aurora-pro/main/assets/guide-5.png" width="400" alt="Redeploy Menu"/>
-    <br/><br/>
-5.  在弹出的确认框中，**不要勾选** "Use existing Build Cache"，然后点击黑色的 **Redeploy** 按钮。
-    > 这一步会强制 Vercel 使用包含数据库密钥的最新设置来**重新构建**您的应用。
+1.  **进入 Deployments 页面**:
+    *   在您的 Vercel 项目控制台中，点击顶部的 **`Deployments`** 标签页。
+
+2.  **找到并重新部署**:
+    *   您会看到一个部署列表，找到**最顶部**的那一条记录（即最新的部署）。
+    *   将鼠标移到该条记录上，点击其最右侧出现的 **`...`** (更多选项) 菜单按钮。
+    *   在弹出的菜单中，选择 **`Redeploy`**。
+
+3.  **确认重新部署**:
+    *   Vercel 会弹出一个确认窗口。
+    *   **请确保不要勾选** "Use existing Build Cache" (使用现有构建缓存) 这个选项。我们需要一次全新的构建来应用新变量。
+    *   最后，点击右下角黑色的 **`Redeploy`** 按钮。
 
 ---
 
