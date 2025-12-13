@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { X, Settings } from 'lucide-react';
 
@@ -9,7 +10,7 @@ interface ModalProps {
 }
 
 export const Modal: React.FC<ModalProps> = ({ title, onClose, children, icon }) => (
-  <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-fade-in">
+  <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-fade-in">
     <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-2xl border border-white/20 dark:border-white/5 overflow-hidden flex flex-col max-h-[90vh] animate-scale-in">
       <div className="p-5 border-b border-gray-100 dark:border-white/5 flex justify-between items-center bg-white/50 dark:bg-slate-800/50 backdrop-blur-md sticky top-0 z-10">
         <div className="flex items-center gap-2.5 text-violet-600 dark:text-violet-400">

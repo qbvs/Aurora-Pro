@@ -1,3 +1,4 @@
+
 export interface LogEntry {
   id: string;
   time: string;
@@ -13,9 +14,9 @@ const notifyListeners = () => {
 };
 
 export const addLog = (level: 'info' | 'error' | 'warn', message: any) => {
-  const timestamp = new Date().toLocaleTimeString();
+  const timestamp = new Date().toLocaleTimeString('zh-CN', { hour12: false });
   const msgStr = typeof message === 'object' 
-    ? (message instanceof Error ? message.message + '\n' + message.stack : JSON.stringify(message)) 
+    ? (message instanceof Error ? message.message : JSON.stringify(message)) 
     : String(message);
     
   logs.unshift({ 
@@ -26,7 +27,7 @@ export const addLog = (level: 'info' | 'error' | 'warn', message: any) => {
   });
   
   // Keep limit
-  if (logs.length > 50) logs.pop();
+  if (logs.length > 100) logs.pop();
   
   // Console mirroring
   if (level === 'error') console.error(message);
@@ -49,4 +50,28 @@ export const subscribeLogs = (callback: () => void) => {
 export const clearLogs = () => {
     logs.length = 0;
     notifyListeners();
+};
+
+// Initialize global error catchers
+export const initLogger = () => {
+    if (typeof window !== 'undefined') {
+        // Prevent duplicate handlers if strict mode runs effect twice
+        if ((window as any).__aurora_logger_init) return;
+        (window as any).__aurora_logger_init = true;
+
+        window.onerror = (msg, url, lineNo, columnNo, error) => {
+            const str = String(msg);
+            if (str.includes('ResizeObserver')) return; // Ignore benign ResizeObserver loops
+            addLog('error', `系统错误: ${str} (${lineNo}:${columnNo})`);
+            return false;
+        };
+
+        window.onunhandledrejection = (event) => {
+            const reason = event.reason;
+            const msg = reason instanceof Error ? reason.message : String(reason);
+            addLog('error', `异步异常: ${msg}`);
+        };
+        
+        addLog('info', '系统日志服务已启动');
+    }
 };
