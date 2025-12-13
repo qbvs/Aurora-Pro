@@ -66,6 +66,7 @@ export const App: React.FC = () => {
   
   // -- New UI State --
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
   const [brokenLinks, setBrokenLinks] = useState<Set<string>>(new Set());
   const [showQrModal, setShowQrModal] = useState<string | null>(null);
 
@@ -323,6 +324,7 @@ export const App: React.FC = () => {
   const toggleTheme = () => { const modes: ('light' | 'dark' | 'system')[] = ['light', 'dark', 'system']; const currentIndex = modes.indexOf(settings.theme); const nextMode = modes[(currentIndex + 1) % modes.length]; const newSettings = { ...settings, theme: nextMode }; setLocalSettings(newSettings); saveSettings(newSettings); };
   const handleSettingsClick = () => { if (isAuthenticated) { setIsEditMode(true); } else { setShowLoginModal(true); } };
   const toggleCategoryExpand = (catId: string) => { const newSet = new Set(expandedCategories); if (newSet.has(catId)) { newSet.delete(catId); } else { newSet.add(catId); } setExpandedCategories(newSet); };
+  const toggleSectionVisibility = (catId: string) => { const newSet = new Set(collapsedCategories); if (newSet.has(catId)) { newSet.delete(catId); } else { newSet.add(catId); } setCollapsedCategories(newSet); };
   const handleTestConnection = async (config: AIProviderConfig) => { setTestStatus({ status: 'loading' }); const result = await testAiConnection(config); setTestStatus({ status: result.success ? 'success' : 'fail', message: result.message }); };
   const handleDeleteAiProvider = (id: string) => { if (!confirm('确定删除此 AI 配置吗？')) return; const newConfigs = settings.aiConfigs.filter(c => c.id !== id); const newSettings = { ...settings, aiConfigs: newConfigs }; setLocalSettings(newSettings); saveSettings(newSettings); setEditingAiConfig(null); };
   const handleAiFillLink = async () => { if (!linkForm.url) return; setIsAiLoading(true); try { const result = await analyzeUrl(linkForm.url); setLinkForm(prev => ({ ...prev, title: result.title, description: result.description, pros: result.pros, cons: result.cons, color: result.brandColor })); addLog('info', 'AI 链接分析完成'); } catch (e: any) { alert('AI 分析失败: ' + e.message); } finally { setIsAiLoading(false); } };
@@ -981,6 +983,7 @@ export const App: React.FC = () => {
                 {categories.map((category) => {
                     const isCommonRecs = category.id === COMMON_REC_ID;
                     const isExpanded = expandedCategories.has(category.id);
+                    const isSectionCollapsed = collapsedCategories.has(category.id);
                     const limit = isCommonRecs ? 8 : 4;
                     const visibleLinks = isExpanded || isCommonRecs ? category.links : category.links.slice(0, limit);
 
@@ -991,40 +994,50 @@ export const App: React.FC = () => {
                                 <Icon name={category.icon} size={24} />
                             </div>
                             <h2 className="font-bold text-xl">{category.title}</h2>
-                            {!isCommonRecs && category.links.length > 4 && (
+                            <button 
+                                onClick={() => toggleSectionVisibility(category.id)}
+                                className="p-1 rounded-md text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-800 hover:text-violet-600 dark:hover:text-violet-400 transition-colors"
+                            >
+                                {isSectionCollapsed ? <ChevronRight size={20} /> : <ChevronDown size={20} />}
+                            </button>
+                            {!isCommonRecs && !isSectionCollapsed && category.links.length > 4 && (
                                 <button onClick={() => toggleCategoryExpand(category.id)} className="ml-auto p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-400 transition-colors">
                                     {isExpanded ? <ChevronUp size={16} /> : <Ellipsis size={16} />}
                                 </button>
                             )}
                         </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-                            {visibleLinks.map((link) => (
-                                <div 
-                                    key={link.id} 
-                                    onClick={() => handleLinkClick(category, link)} 
-                                    className="group relative flex flex-col p-5 rounded-2xl bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border border-transparent hover:border-violet-200 dark:hover:border-violet-500/30 hover:shadow-xl hover:-translate-y-1 transition-all cursor-pointer h-full"
-                                    style={{ backgroundColor: `rgba(var(--bg), ${settings.cardOpacity / 100})` }}
-                                >
-                                    <div className="flex items-start gap-4 mb-3">
-                                        <Favicon url={link.url} size={40} className="shadow-md rounded-xl" />
-                                        <div className="min-w-0 flex-1">
-                                            <h3 className="font-bold text-gray-900 dark:text-gray-100 truncate text-[15px]">{link.title}</h3>
-                                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 leading-5 h-10 line-clamp-2 overflow-hidden">{link.description}</p>
+                        {!isSectionCollapsed && (
+                        <>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                                {visibleLinks.map((link) => (
+                                    <div 
+                                        key={link.id} 
+                                        onClick={() => handleLinkClick(category, link)} 
+                                        className="group relative flex flex-col p-5 rounded-2xl bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border border-transparent hover:border-violet-200 dark:hover:border-violet-500/30 hover:shadow-xl hover:-translate-y-1 transition-all cursor-pointer h-full"
+                                        style={{ backgroundColor: `rgba(var(--bg), ${settings.cardOpacity / 100})` }}
+                                    >
+                                        <div className="flex items-start gap-4 mb-3">
+                                            <Favicon url={link.url} size={40} className="shadow-md rounded-xl" />
+                                            <div className="min-w-0 flex-1">
+                                                <h3 className="font-bold text-gray-900 dark:text-gray-100 truncate text-[15px]">{link.title}</h3>
+                                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 leading-5 h-10 line-clamp-2 overflow-hidden">{link.description}</p>
+                                            </div>
+                                        </div>
+                                        <div className="mt-auto flex flex-wrap gap-2 pt-3 border-t border-gray-100 dark:border-white/5">
+                                            {link.pros && <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400 text-[10px] font-bold border border-emerald-100 dark:border-emerald-500/20 max-w-full truncate"><CircleCheck size={10} className="shrink-0"/> {link.pros}</span>}
+                                            {link.cons && <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-400 text-[10px] font-bold border border-rose-100 dark:border-rose-500/20 max-w-full truncate"><CircleX size={10} className="shrink-0"/> {link.cons}</span>}
                                         </div>
                                     </div>
-                                    <div className="mt-auto flex flex-wrap gap-2 pt-3 border-t border-gray-100 dark:border-white/5">
-                                        {link.pros && <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400 text-[10px] font-bold border border-emerald-100 dark:border-emerald-500/20 max-w-full truncate"><CircleCheck size={10} className="shrink-0"/> {link.pros}</span>}
-                                        {link.cons && <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-400 text-[10px] font-bold border border-rose-100 dark:border-rose-500/20 max-w-full truncate"><CircleX size={10} className="shrink-0"/> {link.cons}</span>}
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                        {!isCommonRecs && category.links.length > 4 && (
-                            <div className="mt-4 flex justify-center">
-                                <button onClick={() => toggleCategoryExpand(category.id)} className="flex items-center gap-1 text-xs font-bold text-gray-400 hover:text-violet-600 dark:hover:text-violet-400 transition-colors">
-                                    {isExpanded ? <>收起 <ChevronUp size={14}/></> : <>查看更多 ({category.links.length - 4}) <ChevronDown size={14}/></>}
-                                </button>
+                                ))}
                             </div>
+                            {!isCommonRecs && category.links.length > 4 && (
+                                <div className="mt-4 flex justify-center">
+                                    <button onClick={() => toggleCategoryExpand(category.id)} className="flex items-center gap-1 text-xs font-bold text-gray-400 hover:text-violet-600 dark:hover:text-violet-400 transition-colors">
+                                        {isExpanded ? <>收起 <ChevronUp size={14}/></> : <>查看更多 ({category.links.length - 4}) <ChevronDown size={14}/></>}
+                                    </button>
+                                </div>
+                            )}
+                        </>
                         )}
                     </div>
                     );
