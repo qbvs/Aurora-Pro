@@ -20,11 +20,12 @@ import {
   loadSearchEngines, saveSearchEngines, isKVConfigured,
   syncCategoriesFromCloud, syncSettingsFromCloud, syncSearchEnginesFromCloud
 } from './services/storageService';
-import { analyzeUrl, generateCategoryLinks, getAiGreeting, suggestIcon, testAiConnection } from './services/geminiService';
+import { analyzeUrl, generateCategoryLinks, getAiGreeting, suggestIcon, testAiConnection, askSimpleQuestion } from './services/geminiService';
 import { Icon } from './components/Icon';
 import { Favicon } from './components/Favicon';
 import { Modal } from './components/Modal';
 import { cn } from './utils';
+import { AiCommandPanel } from './components/AiCommandPanel';
 
 // --- Constants ---
 const COMMON_REC_ID = 'rec-1'; 
@@ -433,6 +434,68 @@ export const App: React.FC = () => {
       } catch (e) { } 
   };
 
+  // --- Ai Panel Handlers ---
+  const handleAiRefreshGreeting = async () => {
+      const text = await getAiGreeting();
+      if (text) {
+          localStorage.setItem('aurora_greeting_v7', JSON.stringify({ text, expiry: Date.now() + 14400000 }));
+      }
+      return text;
+  };
+
+  const handleAiDiscovery = async (topic: string) => {
+      // Use existing link generation logic
+      const allExistingUrls = new Set<string>();
+      categories.forEach(cat => cat.links.forEach(link => allExistingUrls.add(link.url.toLowerCase().replace(/\/$/, ""))));
+      
+      const newLinks = await generateCategoryLinks(topic, 3, Array.from(allExistingUrls));
+      return newLinks.filter(l => l.title && l.url);
+  };
+
+  const handleAddDiscoveryLink = (link: Partial<LinkItem>) => {
+      if (!link.title || !link.url) return;
+      
+      // Determine target category: either current focused one, or Common/First one
+      const targetCatId = viewCategory || (categories.length > 0 ? categories[0].id : null);
+      if (!targetCatId) return;
+
+      const newLink: LinkItem = {
+          id: `gen-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+          title: link.title,
+          url: link.url,
+          description: link.description || '',
+          color: link.color || '#666',
+          pros: link.pros,
+          cons: link.cons,
+          clickCount: 0
+      };
+
+      const newCats = categories.map(cat => {
+          if (cat.id !== targetCatId) return cat;
+          // If it's Common Recs (which shouldn't happen usually as viewCategory logic handles it), warn user? 
+          // Actually logic says: updateCommonRecs recalculates Common. So we should add to a REAL category.
+          // If target is Common, find the first real category.
+          if (cat.id === COMMON_REC_ID) return cat; 
+          return { ...cat, links: [...cat.links, newLink] };
+      });
+      
+      // If target was Common (rec-1), we actually didn't add it above.
+      // Let's force add to the first non-common category if viewCategory was null or common.
+      let finalCats = newCats;
+      if (targetCatId === COMMON_REC_ID) {
+           const firstReal = categories.find(c => c.id !== COMMON_REC_ID);
+           if (firstReal) {
+               finalCats = categories.map(c => c.id === firstReal.id ? { ...c, links: [...c.links, newLink] } : c);
+               addToast('success', `已添加到分类: ${firstReal.title}`);
+           }
+      } else {
+           const catName = categories.find(c => c.id === targetCatId)?.title;
+           addToast('success', `已添加到分类: ${catName}`);
+      }
+
+      handleSaveData(finalCats);
+  };
+
 
   // --- Render Sections ---
   const renderSidebar = () => (
@@ -583,8 +646,7 @@ export const App: React.FC = () => {
                           <label className="flex-1 cursor-pointer h-20 border-2 border-dashed border-slate-700 rounded-xl flex flex-col items-center justify-center text-slate-500 hover:border-cyan-500 hover:text-cyan-400 transition-colors bg-slate-950">
                               <Upload size={20}/>
                               <span className="text-xs font-bold mt-1">上传图片 (最多 2MB)</span>
-                              <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, 'bg')}/>
-                          </label>
+                              <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, 'bg')}/></label>
                       </div>
                   </div>
               )}
@@ -814,17 +876,14 @@ export const App: React.FC = () => {
               </aside>
 
               <main className="flex-1 min-w-0 overflow-y-auto custom-scrollbar pb-20 scroll-smooth h-[calc(100vh-120px)] px-2">
-                  {settings.enableAiGreeting && aiGreeting && !viewCategory && (
-                      <div className="mb-12 relative group animate-fade-in-up">
-                          <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/20 to-purple-500/20 rounded-3xl blur-xl opacity-0 group-hover:opacity-100 transition duration-1000"></div>
-                          <div className="relative px-10 py-12 rounded-3xl bg-slate-900/40 backdrop-blur-md border border-white/10 shadow-lg text-center overflow-hidden">
-                              <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-cyan-500/50 to-transparent opacity-50"></div>
-                              <p className="text-2xl md:text-3xl font-medium text-transparent bg-clip-text bg-gradient-to-r from-white via-slate-200 to-slate-400 leading-relaxed tracking-wide font-serif italic drop-shadow-sm relative z-10">"{aiGreeting}"</p>
-                              <div className="mt-6 flex justify-center gap-2">
-                                  <span className="w-16 h-1 rounded-full bg-gradient-to-r from-transparent via-cyan-500/50 to-transparent opacity-50"/>
-                              </div>
-                          </div>
-                      </div>
+                  {settings.enableAiGreeting && !viewCategory && (
+                      <AiCommandPanel 
+                          initialGreeting={aiGreeting}
+                          onRefreshGreeting={handleAiRefreshGreeting}
+                          onAskQuestion={askSimpleQuestion}
+                          onDiscoverSites={handleAiDiscovery}
+                          onAddLink={handleAddDiscoveryLink}
+                      />
                   )}
                   
                   {viewCategory && (
@@ -991,8 +1050,8 @@ export const App: React.FC = () => {
                             ) : (
                                 <select value={editingAiConfig.envSlot || ''} onChange={(e) => setEditingAiConfig({...editingAiConfig, envSlot: e.target.value})} className="w-full p-3 rounded-xl bg-slate-950 border border-slate-800 outline-none focus:border-cyan-500 text-sm">
                                     <option value="">选择环境变量...</option>
-                                    <option value="API_KEY">API_KEY (默认)</option>
-                                    {[1,2,3,4,5].map(n => <option key={n} value={`CUSTOM_API_KEY_${n}`}>CUSTOM_API_KEY_{n}</option>)}
+                                    <option value="API_KEY">API_KEY (主)</option>
+                                    {[1,2,3,4,5].map(n => <option key={n} value={`VITE_CUSTOM_API_KEY_${n}`}>VITE_CUSTOM_API_KEY_{n}</option>)}
                                 </select>
                             )}
                         </div>

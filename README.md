@@ -7,7 +7,7 @@
 <br>
 *融合设计美学、智能算法与极致的个性化体验*
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FMar-ct%2FAurora-pro&env=API_KEY,ADMIN_PASSWORD&envDescription=Google%20Gemini%20API%20Key%20and%20Admin%20Password&envLink=https://aistudio.google.com/app/apikey)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FMar-ct%2FAurora-pro&env=API_KEY,ADMIN_PASSWORD,VITE_CUSTOM_API_KEY_1&envDescription=Google%20Gemini%20API%20Key%20and%20Admin%20Password&envLink=https://aistudio.google.com/app/apikey)
 [![Deploy to Cloudflare](https://static.cloudflare.com/pages/dev-badge.png)](https://deploy.cloudflare.com/?url=https://github.com/Mar-ct/Aurora-pro)
 <br>
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -74,12 +74,14 @@
 
 #### 第 2 步：配置环境变量
 - 在接下来的页面中，Vercel 会提示您配置环境变量。这是**关键步骤**。
+- **注意**: 为了安全，所有需要暴露给前端的自定义环境变量（例如备用 API Keys）都必须以 `VITE_` 作为前缀，这是构建工具的要求。
 
 | 变量名 (Variable name) | 变量值 (Value) | 描述 |
 | :--- | :--- | :--- |
 | `API_KEY` | `您的 Google Gemini API 密钥` | **(必填)** 用于驱动 AI 功能。 |
 | `ADMIN_PASSWORD` | `您自定义的管理后台密码` | **(必填)** 用于登录后台，请设置一个强密码。 |
-| `CUSTOM_API_KEY_1`~`5`| (可选) | (可选) 备用 API Key 槽位，可在后台切换。 |
+| `VITE_CUSTOM_API_KEY_1` | (可选) 备用 Key 1 | (可选) 备用 API Key 槽位，可在后台切换。 |
+| `VITE_CUSTOM_API_KEY_2` | (可选) 备用 Key 2 | (可选) ... |
 
 - 填写完毕后，点击 **`Deploy`**。请耐心等待 1-2 分钟，Vercel 正在为您构建应用。
 
@@ -98,7 +100,7 @@
 2.  找到最新的那条部署记录 (通常在最顶部)，点击右侧的 **`...`** (更多) 按钮。
 3.  在下拉菜单中选择 **`Redeploy`** 并确认。
 
-**✅ 部署完成！** 访问您的 Vercel 域名 (`.vercel.app`) 即可开始使用。进入后台后，侧边栏底部应显示 **🟢 已连接 Vercel KV**。
+**✅ 部署完成！** 访问您的 Vercel 域名 (`.vercel.app`) 即可开始使用。进入后台后，侧边栏底部应显示 **🟢 已连接云同步**。
 
 ---
 
@@ -141,6 +143,7 @@ Cloudflare 在全球拥有顶级的网络性能，尤其在国内访问速度更
     | `CF_ACCOUNT_ID` | `您的 Cloudflare 账户 ID` | Cloudflare 首页右侧可找到 |
     | `CF_NAMESPACE_ID` | `您在第2步复制的 Namespace ID` | 第 2 步获取 |
     | `CF_API_TOKEN` | `您在第3步生成的 API Token` | 第 3 步获取 |
+    | `VITE_CUSTOM_API_KEY_1`| (可选) 备用 Key 1 | (可选) ... |
 
     > **🔒 安全提示**: 请务必点击每个变量右侧的小锁图标 (Encrypt) 来加密您的敏感信息。
 
@@ -161,7 +164,7 @@ Cloudflare 在全球拥有顶级的网络性能，尤其在国内访问速度更
 | `CF_ACCOUNT_ID` | Cloudflare | **(必填)** 您的 Cloudflare 账户 ID。 |
 | `CF_NAMESPACE_ID` | Cloudflare | **(必填)** 您的 KV Namespace ID。 |
 | `CF_API_TOKEN` | Cloudflare | **(必填)** 您生成的 API Token。 |
-| `CUSTOM_API_KEY_1`~`5` | Vercel & CF | (可选) 预留槽位，用于在后台的 AI 配置中快速切换不同的备用 API Key。 |
+| `VITE_CUSTOM_API_KEY_1`~`5` | Vercel & CF | (可选) 备用槽位。**必须以 `VITE_` 开头** 才能被前端代码识别。 |
 
 ---
 
@@ -179,6 +182,7 @@ npm install
 # 在根目录新建 .env 文件，填入：
 # API_KEY=your_gemini_key
 # ADMIN_PASSWORD=your_password
+# VITE_CUSTOM_API_KEY_1=your_other_key
 # 注：本地开发无需配置 KV，数据将存储在 LocalStorage 中。
 
 # 4. 启动

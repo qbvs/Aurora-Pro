@@ -1,35 +1,33 @@
+
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 
 export default defineConfig(({ mode }) => {
   // Load env file based on `mode` in the current working directory.
-  // This loads .env files
+  // This will load .env, .env.local, .env.[mode], .env.[mode].local
   const env = loadEnv(mode, (process as any).cwd(), '');
   
-  // MERGE: explicitly read from process.env to capture Vercel/Cloudflare system variables
-  // during the build process, which ensures variables set in the Dashboard are picked up.
-  const envVars = {
-    API_KEY: env.API_KEY || process.env.API_KEY || '',
-    ADMIN_PASSWORD: env.ADMIN_PASSWORD || process.env.ADMIN_PASSWORD || '',
-    
-    // Vercel KV
-    KV_REST_API_URL: env.KV_REST_API_URL || process.env.KV_REST_API_URL || '',
-    KV_REST_API_TOKEN: env.KV_REST_API_TOKEN || process.env.KV_REST_API_TOKEN || '',
-    
-    // Cloudflare KV
-    CF_ACCOUNT_ID: env.CF_ACCOUNT_ID || process.env.CF_ACCOUNT_ID || '',
-    CF_NAMESPACE_ID: env.CF_NAMESPACE_ID || process.env.CF_NAMESPACE_ID || '',
-    CF_API_TOKEN: env.CF_API_TOKEN || process.env.CF_API_TOKEN || '',
-    
-    // Custom API Keys
-    CUSTOM_API_KEY_1: env.CUSTOM_API_KEY_1 || process.env.CUSTOM_API_KEY_1 || '',
-    CUSTOM_API_KEY_2: env.CUSTOM_API_KEY_2 || process.env.CUSTOM_API_KEY_2 || '',
-    CUSTOM_API_KEY_3: env.CUSTOM_API_KEY_3 || process.env.CUSTOM_API_KEY_3 || '',
-    CUSTOM_API_KEY_4: env.CUSTOM_API_KEY_4 || process.env.CUSTOM_API_KEY_4 || '',
-    CUSTOM_API_KEY_5: env.CUSTOM_API_KEY_5 || process.env.CUSTOM_API_KEY_5 || '',
-  };
+  // Vite's loadEnv automatically handles merging from process.env, 
+  // so we don't need to manually merge anymore.
+  // We just need to ensure the variables we use are exposed correctly.
   
+  // Vite automatically exposes variables prefixed with VITE_ to `import.meta.env`
+  // We can still define `process.env` for compatibility if needed, but it's better
+  // to migrate the code to use `import.meta.env`. For now, we'll define them to minimize changes.
+  
+  // Create a definition object for Vite's `define` config
+  const processEnv: { [key: string]: string } = {};
+  
+  // We iterate over the loaded env variables and create definitions
+  // for those we want to expose under `process.env`.
+  // It's crucial to prefix them with VITE_ in your .env file or Vercel dashboard.
+  for (const key in env) {
+    if (key.startsWith('VITE_') || ['API_KEY', 'ADMIN_PASSWORD', 'KV_REST_API_URL', 'KV_REST_API_TOKEN', 'CF_ACCOUNT_ID', 'CF_NAMESPACE_ID', 'CF_API_TOKEN'].includes(key)) {
+      processEnv[`process.env.${key}`] = JSON.stringify(env[key]);
+    }
+  }
+
   return {
     plugins: [react()],
     resolve: {
@@ -37,23 +35,7 @@ export default defineConfig(({ mode }) => {
         '@': path.resolve((process as any).cwd(), './'),
       },
     },
-    define: {
-      // We explicitly map each key to the merged envVars object
-      'process.env.API_KEY': JSON.stringify(envVars.API_KEY),
-      'process.env.ADMIN_PASSWORD': JSON.stringify(envVars.ADMIN_PASSWORD),
-      // Vercel KV
-      'process.env.KV_REST_API_URL': JSON.stringify(envVars.KV_REST_API_URL),
-      'process.env.KV_REST_API_TOKEN': JSON.stringify(envVars.KV_REST_API_TOKEN),
-      // Cloudflare KV
-      'process.env.CF_ACCOUNT_ID': JSON.stringify(envVars.CF_ACCOUNT_ID),
-      'process.env.CF_NAMESPACE_ID': JSON.stringify(envVars.CF_NAMESPACE_ID),
-      'process.env.CF_API_TOKEN': JSON.stringify(envVars.CF_API_TOKEN),
-      // Custom API Keys
-      'process.env.CUSTOM_API_KEY_1': JSON.stringify(envVars.CUSTOM_API_KEY_1),
-      'process.env.CUSTOM_API_KEY_2': JSON.stringify(envVars.CUSTOM_API_KEY_2),
-      'process.env.CUSTOM_API_KEY_3': JSON.stringify(envVars.CUSTOM_API_KEY_3),
-      'process.env.CUSTOM_API_KEY_4': JSON.stringify(envVars.CUSTOM_API_KEY_4),
-      'process.env.CUSTOM_API_KEY_5': JSON.stringify(envVars.CUSTOM_API_KEY_5)
-    }
+    // The `define` option will perform a direct string replacement during build.
+    define: processEnv,
   };
 });

@@ -7,15 +7,19 @@ import { getSettingsLocal } from "./storageService";
 
 // --- Helpers ---
 
+// Updated to match Vite's recommended `VITE_` prefix for client-side env vars.
 const getEnvValue = (key?: string): string => {
     if (!key) return '';
+    // This function now expects variables to be available under process.env
+    // The vite.config.ts ensures they are injected during build.
+    // For custom keys, we now look for VITE_CUSTOM_API_KEY_*
     switch (key) {
         case 'API_KEY': return process.env.API_KEY || '';
-        case 'CUSTOM_API_KEY_1': return process.env.CUSTOM_API_KEY_1 || '';
-        case 'CUSTOM_API_KEY_2': return process.env.CUSTOM_API_KEY_2 || '';
-        case 'CUSTOM_API_KEY_3': return process.env.CUSTOM_API_KEY_3 || '';
-        case 'CUSTOM_API_KEY_4': return process.env.CUSTOM_API_KEY_4 || '';
-        case 'CUSTOM_API_KEY_5': return process.env.CUSTOM_API_KEY_5 || '';
+        case 'VITE_CUSTOM_API_KEY_1': return process.env.VITE_CUSTOM_API_KEY_1 || '';
+        case 'VITE_CUSTOM_API_KEY_2': return process.env.VITE_CUSTOM_API_KEY_2 || '';
+        case 'VITE_CUSTOM_API_KEY_3': return process.env.VITE_CUSTOM_API_KEY_3 || '';
+        case 'VITE_CUSTOM_API_KEY_4': return process.env.VITE_CUSTOM_API_KEY_4 || '';
+        case 'VITE_CUSTOM_API_KEY_5': return process.env.VITE_CUSTOM_API_KEY_5 || '';
         default: return '';
     }
 };
@@ -227,6 +231,33 @@ export const getAiGreeting = async (): Promise<string> => {
      }
      return text.replace(/[^\u4e00-\u9fa5，。？！；：]/g, '').trim(); 
   } catch { return ""; }
+};
+
+export const askSimpleQuestion = async (question: string): Promise<string> => {
+  const config = getActiveConfig();
+  if (!config.apiKey) return "请先配置 API Key";
+  
+  const promptText = `请用简练、清晰的中文回答用户的问题。字数控制在 100 字以内，除非问题需要长篇大论。
+  用户问题: "${question}"`;
+
+  try {
+     let text = '';
+     const modelName = config.model || 'gemini-2.5-flash';
+     if (config.type === 'google') {
+        const ai = new GoogleGenAI({ apiKey: config.apiKey });
+        const response = await ai.models.generateContent({ 
+            model: modelName, 
+            contents: promptText,
+            config: getThinkingConfig(modelName)
+        });
+        text = response.text?.trim() || "AI 思考超时";
+     } else {
+        text = await fetchOpenAI(config, [{ role: "user", content: promptText }], 'AI问答');
+     }
+     return text;
+  } catch (e: any) { 
+      throw handleAiError(e, 'AI问答');
+  }
 };
 
 export const suggestIcon = async (text: string): Promise<string> => {
