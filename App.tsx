@@ -5,7 +5,7 @@ import {
   LogOut, Edit, Trash2, X, Wand2, Globe, AlertCircle, 
   Image as ImageIcon, Upload, Palette, Type as TypeIcon, Lock,
   Activity, CircleCheck, CircleX, Terminal, Bot, Zap, RefreshCw, Key, Server, TriangleAlert, ChevronDown, ChevronRight,
-  Flame, ChevronUp, ThumbsUp, ThumbsDown, Monitor, Cpu, Paintbrush, Radio, Link as LinkIcon, Power, Share2, Ellipsis, QrCode, OctagonAlert, Database, Cloud, Github, Mail
+  Flame, ChevronUp, ThumbsUp, ThumbsDown, Monitor, Cpu, Paintbrush, Radio, Link as LinkIcon, Power, Share2, Ellipsis, QrCode, OctagonAlert, Database, Cloud, Github, Mail, Sparkles, ScanLine
 } from 'lucide-react';
 import { 
   Category, LinkItem, AppSettings, SearchEngine, 
@@ -67,6 +67,7 @@ export const App: React.FC = () => {
   // -- New UI State --
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [brokenLinks, setBrokenLinks] = useState<Set<string>>(new Set());
+  const [showQrModal, setShowQrModal] = useState<string | null>(null);
 
   // -- Inputs --
   const [searchTerm, setSearchTerm] = useState('');
@@ -89,9 +90,11 @@ export const App: React.FC = () => {
   const [genCount, setGenCount] = useState(4);
   const [isGeneratingLinks, setIsGeneratingLinks] = useState(false);
   const [isAiLoading, setIsAiLoading] = useState(false);
+  const [isIconSuggesting, setIsIconSuggesting] = useState(false);
 
   // Social Form
   const [socialForm, setSocialForm] = useState<Partial<SocialLink>>({});
+  const [showSocialQrInput, setShowSocialQrInput] = useState(false);
 
   // AI Config Forms
   const [editingAiConfig, setEditingAiConfig] = useState<AIProviderConfig | null>(null);
@@ -252,15 +255,115 @@ export const App: React.FC = () => {
   const handleLogin = (e: React.FormEvent) => { e.preventDefault(); if (!process.env.ADMIN_PASSWORD || passwordInput === process.env.ADMIN_PASSWORD) { setIsAuthenticated(true); localStorage.setItem('aurora_auth', 'true'); setShowLoginModal(false); setIsEditMode(true); setLoginError(''); setPasswordInput(''); addLog('info', '管理员登录成功'); } else { setLoginError('密码错误'); } };
   const handleSaveLink = async () => { if (!editingLink || !linkForm.title || !linkForm.url) return; const isValid = await isFaviconValid(linkForm.url); if (!isValid && !confirm('该链接似乎无法加载图标，是否仍要添加？')) return; const newLink: LinkItem = { id: linkForm.id || `l-${Date.now()}`, title: linkForm.title, url: linkForm.url.startsWith('http') ? linkForm.url : `https://${linkForm.url}`, description: linkForm.description || '', color: linkForm.color || '#666', clickCount: linkForm.clickCount || 0, pros: linkForm.pros, cons: linkForm.cons }; let newCats = categories.map(cat => { if (cat.id !== editingLink.catId) return cat; return editingLink.link ? { ...cat, links: cat.links.map(l => l.id === editingLink.link!.id ? newLink : l) } : { ...cat, links: [...cat.links, newLink] }; }); handleSaveData(newCats); setEditingLink(null); setLinkForm({}); addLog('info', `链接已保存: ${newLink.title}`); };
   const handleGenerateCategoryLinks = async () => { if (!showGenLinksModal) return; setIsGeneratingLinks(true); try { const allExistingUrls = new Set<string>(); categories.forEach(cat => cat.links.forEach(link => allExistingUrls.add(link.url.toLowerCase().replace(/\/$/, "")))); const existingInCat = categories.find(c => c.id === showGenLinksModal.catId)?.links.map(l => l.url) || []; const newLinks = await generateCategoryLinks(showGenLinksModal.title, genCount, existingInCat); const validLinks: LinkItem[] = []; for (const l of newLinks) { if (!l.url || !l.title) continue; const normalizedUrl = l.url.toLowerCase().replace(/\/$/, ""); if (allExistingUrls.has(normalizedUrl)) continue; if (await isFaviconValid(l.url)) { validLinks.push({ id: `gen-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`, title: l.title, url: l.url, description: l.description || '', color: l.color || '#666', clickCount: 0, pros: l.pros, cons: l.cons }); allExistingUrls.add(normalizedUrl); } } if (validLinks.length === 0) return alert("AI 生成未找到有效新链接"); let newCats = categories.map(cat => cat.id !== showGenLinksModal.catId ? cat : { ...cat, links: [...cat.links, ...validLinks] }); handleSaveData(newCats); setShowGenLinksModal(null); addLog('info', `AI 添加了 ${validLinks.length} 个链接`); } catch { alert('生成失败'); } finally { setIsGeneratingLinks(false); } };
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'logo' | 'bg') => { const file = e.target.files?.[0]; if (!file) return; if (file.size > 2 * 1024 * 1024) { alert('文件大小不能超过 2MB'); return; } const reader = new FileReader(); reader.onloadend = () => { const result = reader.result as string; const newSettings = { ...settings }; if (type === 'logo') { newSettings.customLogoUrl = result; newSettings.logoMode = 'image'; } else { newSettings.customBackgroundImage = result; newSettings.backgroundMode = 'custom'; } setLocalSettings(newSettings); saveSettings(newSettings); addLog('info', `${type === 'logo' ? 'Logo' : '背景'} 图片已更新`); }; reader.readAsDataURL(file); };
+  
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'logo' | 'bg' | 'qr') => { 
+      const file = e.target.files?.[0]; 
+      if (!file) return; 
+      if (file.size > 2 * 1024 * 1024) { alert('文件大小不能超过 2MB'); return; } 
+      const reader = new FileReader(); 
+      reader.onloadend = () => { 
+          const result = reader.result as string; 
+          if (type === 'qr') {
+              setSocialForm(prev => ({...prev, qrCode: result}));
+              addLog('info', 'QR 二维码上传成功');
+              return;
+          }
+          const newSettings = { ...settings }; 
+          if (type === 'logo') { 
+              newSettings.customLogoUrl = result; 
+              newSettings.logoMode = 'image'; 
+          } else { 
+              newSettings.customBackgroundImage = result; 
+              newSettings.backgroundMode = 'custom'; 
+          } 
+          setLocalSettings(newSettings); 
+          saveSettings(newSettings); 
+          addLog('info', `${type === 'logo' ? 'Logo' : '背景'} 图片已更新`); 
+      }; 
+      reader.readAsDataURL(file); 
+  };
+
   const handleAddAiProvider = () => { const newConfig: AIProviderConfig = { id: `ai-${Date.now()}`, name: 'New Provider', type: 'openai', baseUrl: 'https://api.openai.com/v1', apiKey: '', model: 'gpt-3.5-turbo', isActive: false }; const newConfigs = [...settings.aiConfigs, newConfig]; const newSettings = { ...settings, aiConfigs: newConfigs }; setLocalSettings(newSettings); saveSettings(newSettings); setEditingAiConfig(newConfig); };
-  const autoFillSearchEngine = (url: string) => { if (!url) return; try { const fullUrl = url.startsWith('http') ? url : `https://${url}`; const urlObj = new URL(fullUrl); const hostname = urlObj.hostname.replace('www.', ''); const name = hostname.split('.')[0]; const capitalized = name.charAt(0).toUpperCase() + name.slice(1); setEngineForm({ ...engineForm, baseUrl: urlObj.origin, name: capitalized, searchUrlPattern: `${urlObj.origin}/search?q=` }); } catch (e) { } };
+  
+  // Smart Search Engine Detection
+  const autoFillSearchEngine = (url: string) => { 
+      if (!url) return; 
+      try { 
+          const fullUrl = url.startsWith('http') ? url : `https://${url}`; 
+          const urlObj = new URL(fullUrl); 
+          const hostname = urlObj.hostname.toLowerCase().replace('www.', ''); 
+          
+          let name = '';
+          let searchPattern = '';
+
+          // Known patterns
+          if (hostname.includes('google')) { name = 'Google'; searchPattern = 'https://www.google.com/search?q='; }
+          else if (hostname.includes('baidu')) { name = 'Baidu'; searchPattern = 'https://www.baidu.com/s?wd='; }
+          else if (hostname.includes('bing')) { name = 'Bing'; searchPattern = 'https://www.bing.com/search?q='; }
+          else if (hostname.includes('duckduckgo')) { name = 'DuckDuckGo'; searchPattern = 'https://duckduckgo.com/?q='; }
+          else if (hostname.includes('sogou')) { name = 'Sogou'; searchPattern = 'https://www.sogou.com/web?query='; }
+          else if (hostname.includes('yahoo')) { name = 'Yahoo'; searchPattern = 'https://search.yahoo.com/search?p='; }
+          else {
+              // Fallback heuristic
+              const parts = hostname.split('.');
+              name = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
+              searchPattern = `${urlObj.origin}/search?q=`;
+          }
+
+          setEngineForm({ 
+              ...engineForm, 
+              baseUrl: urlObj.origin, 
+              name: engineForm.name || name, 
+              searchUrlPattern: engineForm.searchUrlPattern || searchPattern 
+          }); 
+          addLog('info', `智能识别搜索引擎: ${name}`);
+      } catch (e) { } 
+  };
+
   const toggleTheme = () => { const modes: ('light' | 'dark' | 'system')[] = ['light', 'dark', 'system']; const currentIndex = modes.indexOf(settings.theme); const nextMode = modes[(currentIndex + 1) % modes.length]; const newSettings = { ...settings, theme: nextMode }; setLocalSettings(newSettings); saveSettings(newSettings); };
   const handleSettingsClick = () => { if (isAuthenticated) { setIsEditMode(true); } else { setShowLoginModal(true); } };
   const toggleCategoryExpand = (catId: string) => { const newSet = new Set(expandedCategories); if (newSet.has(catId)) { newSet.delete(catId); } else { newSet.add(catId); } setExpandedCategories(newSet); };
   const handleTestConnection = async (config: AIProviderConfig) => { setTestStatus({ status: 'loading' }); const result = await testAiConnection(config); setTestStatus({ status: result.success ? 'success' : 'fail', message: result.message }); };
   const handleDeleteAiProvider = (id: string) => { if (!confirm('确定删除此 AI 配置吗？')) return; const newConfigs = settings.aiConfigs.filter(c => c.id !== id); const newSettings = { ...settings, aiConfigs: newConfigs }; setLocalSettings(newSettings); saveSettings(newSettings); setEditingAiConfig(null); };
   const handleAiFillLink = async () => { if (!linkForm.url) return; setIsAiLoading(true); try { const result = await analyzeUrl(linkForm.url); setLinkForm(prev => ({ ...prev, title: result.title, description: result.description, pros: result.pros, cons: result.cons, color: result.brandColor })); addLog('info', 'AI 链接分析完成'); } catch (e: any) { alert('AI 分析失败: ' + e.message); } finally { setIsAiLoading(false); } };
+
+  // New Actions
+  const handleAiSuggestIcon = async () => {
+      if (!settings.appName) return;
+      setIsIconSuggesting(true);
+      try {
+          const icon = await suggestIcon(settings.appName);
+          const n = {...settings, appIcon: icon};
+          setLocalSettings(n);
+          saveSettings(n);
+          addLog('info', `AI 推荐图标: ${icon}`);
+      } catch {
+          addLog('error', 'AI 推荐图标失败');
+      } finally {
+          setIsIconSuggesting(false);
+      }
+  };
+
+  const autoFillSocialLink = (url: string) => {
+      if (!url) return;
+      try {
+          const u = new URL(url.startsWith('http') ? url : `https://${url}`);
+          const host = u.hostname.toLowerCase();
+          let platform = '';
+          let icon = 'Link';
+
+          if (host.includes('github')) { platform = 'GitHub'; icon = 'Github'; }
+          else if (host.includes('twitter') || host.includes('x.com')) { platform = 'X (Twitter)'; icon = 'Twitter'; }
+          else if (host.includes('youtube')) { platform = 'YouTube'; icon = 'Youtube'; }
+          else if (host.includes('linkedin')) { platform = 'LinkedIn'; icon = 'Linkedin'; }
+          else if (host.includes('instagram')) { platform = 'Instagram'; icon = 'Instagram'; }
+          else if (host.includes('facebook')) { platform = 'Facebook'; icon = 'Facebook'; }
+          else if (host.includes('wechat') || host.includes('weixin')) { platform = 'WeChat'; icon = 'MessageCircle'; }
+          else if (host.includes('mail')) { platform = 'Email'; icon = 'Mail'; }
+          
+          setSocialForm(prev => ({ ...prev, url: url, platform: prev.platform || platform, icon: prev.icon || icon }));
+      } catch {}
+  };
 
   // --- Render Components ---
 
@@ -397,24 +500,35 @@ export const App: React.FC = () => {
                   {settings.logoMode === 'icon' ? (
                       <div>
                           <label className="block text-sm font-bold text-gray-500 mb-2">图标名称 (Lucide React)</label>
-                          <div className="flex gap-3">
+                          <div className="flex gap-2">
                               <div className="w-12 h-12 rounded-xl bg-violet-100 dark:bg-violet-900/20 text-violet-600 flex items-center justify-center shrink-0">
                                   <Icon name={settings.appIcon} size={24}/>
                               </div>
-                              <input 
-                                  value={settings.appIcon} 
-                                  onChange={(e) => { const n = {...settings, appIcon: e.target.value}; setLocalSettings(n); saveSettings(n); }}
-                                  className="flex-1 p-3 rounded-xl bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-gray-700 outline-none focus:border-violet-500 transition-colors font-mono"
-                              />
+                              <div className="flex-1 flex gap-2">
+                                  <input 
+                                      value={settings.appIcon} 
+                                      onChange={(e) => { const n = {...settings, appIcon: e.target.value}; setLocalSettings(n); saveSettings(n); }}
+                                      className="flex-1 p-3 rounded-xl bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-gray-700 outline-none focus:border-violet-500 transition-colors font-mono"
+                                  />
+                                  <button onClick={handleAiSuggestIcon} disabled={isIconSuggesting} className="px-4 bg-violet-100 text-violet-600 rounded-xl font-bold hover:bg-violet-200 transition-colors flex items-center gap-2 text-xs">
+                                      {isIconSuggesting ? <LoadingSpinner/> : <Sparkles size={16}/>} 智能推荐
+                                  </button>
+                              </div>
                           </div>
                       </div>
                   ) : (
                       <div>
                           <label className="block text-sm font-bold text-gray-500 mb-2">上传 Logo</label>
-                          <div className="flex items-center gap-4">
+                          <div className="flex items-center gap-2">
                               {settings.customLogoUrl && <img src={settings.customLogoUrl} className="w-12 h-12 rounded-xl object-contain bg-gray-100"/>}
-                              <label className="cursor-pointer px-4 py-2 bg-gray-100 dark:bg-slate-700 hover:bg-gray-200 rounded-lg text-sm font-bold flex items-center gap-2">
-                                  <Upload size={16}/> 选择图片
+                              <input 
+                                  placeholder="https://..." 
+                                  value={settings.customLogoUrl || ''} 
+                                  onChange={(e) => { const n = {...settings, customLogoUrl: e.target.value}; setLocalSettings(n); saveSettings(n); }}
+                                  className="flex-1 p-2.5 rounded-xl bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-gray-700 outline-none text-sm"
+                              />
+                              <label className="cursor-pointer px-4 py-2.5 bg-gray-100 dark:bg-slate-700 hover:bg-gray-200 rounded-xl text-sm font-bold flex items-center gap-2 shrink-0">
+                                  <Upload size={16}/> 上传
                                   <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, 'logo')}/>
                               </label>
                           </div>
@@ -430,7 +544,10 @@ export const App: React.FC = () => {
                       <div key={link.id} className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-slate-900 rounded-xl border border-gray-100 dark:border-gray-700">
                           <div className="p-2 bg-white dark:bg-slate-800 rounded-lg text-gray-500"><Icon name={link.icon} size={18}/></div>
                           <div className="flex-1 min-w-0">
-                              <div className="font-bold text-sm">{link.platform}</div>
+                              <div className="font-bold text-sm flex items-center gap-2">
+                                  {link.platform}
+                                  {link.qrCode && <span title="包含二维码"><ScanLine size={12} className="text-emerald-500"/></span>}
+                              </div>
                               <div className="text-xs text-gray-400 truncate">{link.url}</div>
                           </div>
                           <button onClick={() => { 
@@ -441,24 +558,49 @@ export const App: React.FC = () => {
                       </div>
                   ))}
                </div>
-               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <input placeholder="平台 (e.g. GitHub)" value={socialForm.platform || ''} onChange={e => setSocialForm({...socialForm, platform: e.target.value})} className="p-2.5 rounded-xl bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-gray-700 text-sm outline-none"/>
-                  <input placeholder="URL" value={socialForm.url || ''} onChange={e => setSocialForm({...socialForm, url: e.target.value})} className="p-2.5 rounded-xl bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-gray-700 text-sm outline-none"/>
-                  <div className="flex gap-2">
-                      <input placeholder="Icon (Lucide)" value={socialForm.icon || ''} onChange={e => setSocialForm({...socialForm, icon: e.target.value})} className="flex-1 p-2.5 rounded-xl bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-gray-700 text-sm outline-none"/>
-                      <button onClick={() => {
-                          if(!socialForm.platform || !socialForm.url) return;
-                          const newLink: SocialLink = {
-                              id: `sl-${Date.now()}`,
-                              platform: socialForm.platform,
-                              url: socialForm.url,
-                              icon: socialForm.icon || 'Link'
-                          };
-                          const n = {...settings, socialLinks: [...(settings.socialLinks || []), newLink]};
-                          setLocalSettings(n); saveSettings(n);
-                          setSocialForm({});
-                      }} className="px-4 bg-violet-600 text-white rounded-xl font-bold hover:bg-violet-700"><Plus size={18}/></button>
-                  </div>
+               
+               <div className="bg-gray-50 dark:bg-slate-900/50 p-4 rounded-2xl border border-gray-100 dark:border-gray-700">
+                   <div className="flex gap-2 mb-3">
+                       <input 
+                          placeholder="链接 URL (支持自动识别)" 
+                          value={socialForm.url || ''} 
+                          onChange={e => { setSocialForm({...socialForm, url: e.target.value}); autoFillSocialLink(e.target.value); }} 
+                          className="flex-1 p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-gray-200 dark:border-gray-700 text-sm outline-none"
+                       />
+                       <button onClick={() => autoFillSocialLink(socialForm.url || '')} className="px-3 bg-violet-100 text-violet-600 rounded-xl font-bold text-xs hover:bg-violet-200"><Wand2 size={16}/></button>
+                   </div>
+                   
+                   <div className="grid grid-cols-2 gap-3 mb-3">
+                       <input placeholder="平台 (GitHub)" value={socialForm.platform || ''} onChange={e => setSocialForm({...socialForm, platform: e.target.value})} className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-gray-200 dark:border-gray-700 text-sm outline-none"/>
+                       <input placeholder="图标 (Github)" value={socialForm.icon || ''} onChange={e => setSocialForm({...socialForm, icon: e.target.value})} className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-gray-200 dark:border-gray-700 text-sm outline-none"/>
+                   </div>
+
+                   {showSocialQrInput ? (
+                       <div className="flex gap-2 mb-3 animate-fade-in">
+                           <input placeholder="二维码 URL / Base64" value={socialForm.qrCode || ''} onChange={e => setSocialForm({...socialForm, qrCode: e.target.value})} className="flex-1 p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-gray-200 dark:border-gray-700 text-sm outline-none"/>
+                           <label className="cursor-pointer px-3 bg-white dark:bg-slate-900 border border-gray-200 dark:border-gray-700 rounded-xl flex items-center justify-center hover:bg-gray-50">
+                               <Upload size={16} className="text-gray-500"/>
+                               <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, 'qr')}/>
+                           </label>
+                       </div>
+                   ) : (
+                       <button onClick={() => setShowSocialQrInput(true)} className="text-xs text-gray-400 hover:text-violet-500 flex items-center gap-1 mb-3 font-bold">+ 添加二维码 (WeChat 等)</button>
+                   )}
+
+                   <button onClick={() => {
+                       if(!socialForm.platform || !socialForm.url) return;
+                       const newLink: SocialLink = {
+                           id: `sl-${Date.now()}`,
+                           platform: socialForm.platform,
+                           url: socialForm.url,
+                           icon: socialForm.icon || 'Link',
+                           qrCode: socialForm.qrCode
+                       };
+                       const n = {...settings, socialLinks: [...(settings.socialLinks || []), newLink]};
+                       setLocalSettings(n); saveSettings(n);
+                       setSocialForm({});
+                       setShowSocialQrInput(false);
+                   }} className="w-full py-2.5 bg-violet-600 text-white rounded-xl font-bold hover:bg-violet-700 flex items-center justify-center gap-2"><Plus size={18}/> 添加社交链接</button>
                </div>
           </section>
           
@@ -470,169 +612,6 @@ export const App: React.FC = () => {
                   className="w-full h-24 p-3 rounded-xl bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-gray-700 outline-none focus:border-violet-500 font-mono text-sm"
                   placeholder="© 2024 Aurora Pro..."
               />
-          </section>
-      </div>
-  );
-
-  const renderAISettings = () => (
-      <div className="space-y-6 animate-fade-in">
-          <div className="flex justify-between items-center">
-               <h3 className="text-lg font-bold flex items-center gap-2"><Bot className="text-violet-500"/> AI 服务配置</h3>
-               <button onClick={handleAddAiProvider} className="px-4 py-2 bg-violet-600 text-white rounded-xl text-sm font-bold hover:bg-violet-700 shadow-lg shadow-violet-500/20 flex items-center gap-2"><Plus size={16}/> 添加服务</button>
-          </div>
-
-          <div className="grid gap-4">
-              {settings.aiConfigs.map(config => (
-                  <div key={config.id} className={cn("p-5 rounded-2xl border transition-all relative overflow-hidden", config.isActive ? "bg-violet-50 dark:bg-violet-900/10 border-violet-500/30 ring-1 ring-violet-500/30" : "bg-white dark:bg-slate-800 border-gray-100 dark:border-gray-700")}>
-                      <div className="flex justify-between items-start z-10 relative">
-                          <div className="flex items-center gap-4">
-                              <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center shrink-0", config.isActive ? "bg-violet-500 text-white" : "bg-gray-100 dark:bg-slate-700 text-gray-500")}>
-                                  {config.type === 'google' ? <Icon name="Gem" size={20}/> : <Icon name="Zap" size={20}/>}
-                              </div>
-                              <div>
-                                  <div className="font-bold text-gray-800 dark:text-gray-100 flex items-center gap-2">
-                                      {config.name}
-                                      {config.isActive && <span className="px-2 py-0.5 bg-violet-200 dark:bg-violet-500/30 text-violet-700 dark:text-violet-300 rounded text-[10px]">ACTIVE</span>}
-                                  </div>
-                                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-1 font-mono flex items-center gap-2">
-                                      <span className="opacity-70">{config.type === 'google' ? 'Google Gemini' : 'OpenAI Compatible'}</span>
-                                      <span>•</span>
-                                      <span className="opacity-70">{config.model}</span>
-                                  </div>
-                              </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                              {!config.isActive && (
-                                  <button onClick={() => {
-                                      const newConfigs = settings.aiConfigs.map(c => ({...c, isActive: c.id === config.id}));
-                                      const n = {...settings, aiConfigs: newConfigs};
-                                      setLocalSettings(n); saveSettings(n);
-                                      addLog('info', `切换 AI 服务为: ${config.name}`);
-                                  }} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-white dark:bg-slate-700 border border-gray-200 dark:border-gray-600 hover:border-violet-500 hover:text-violet-500">启用</button>
-                              )}
-                              <button onClick={() => setEditingAiConfig(config)} className="p-2 text-gray-400 hover:text-violet-500 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-lg"><Settings size={18}/></button>
-                          </div>
-                      </div>
-                      
-                      {/* Env Slot Indicator */}
-                      {config.envSlot && (
-                          <div className="mt-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-gray-100 dark:bg-slate-700/50 text-[10px] font-mono text-gray-500">
-                              <Key size={10}/> 使用环境变量: {config.envSlot}
-                          </div>
-                      )}
-                  </div>
-              ))}
-          </div>
-
-          <div className="bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-300 p-4 rounded-xl text-sm flex gap-3">
-              <TriangleAlert size={20} className="shrink-0"/>
-              <div>
-                  <p className="font-bold mb-1">关于 API Key 安全</p>
-                  <p className="opacity-80">建议使用 Vercel 环境变量 (Environment Variables) 存储 Key，避免明文保存。配置后，只需在上方选择对应的 Env Slot 即可。</p>
-              </div>
-          </div>
-      </div>
-  );
-
-  const renderAppearance = () => (
-      <div className="space-y-8 animate-fade-in">
-          <section className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-sm border border-gray-100 dark:border-gray-700">
-              <h3 className="text-lg font-bold mb-6 flex items-center gap-2"><Sun className="text-amber-500"/> 主题模式</h3>
-              <div className="grid grid-cols-3 gap-4">
-                  {(['light', 'dark', 'system'] as const).map(theme => (
-                      <button 
-                          key={theme}
-                          onClick={() => { const n = {...settings, theme}; setLocalSettings(n); saveSettings(n); }}
-                          className={cn(
-                              "flex flex-col items-center gap-3 p-4 rounded-xl border-2 transition-all",
-                              settings.theme === theme 
-                                  ? "border-violet-500 bg-violet-50 dark:bg-violet-900/20 text-violet-700 dark:text-violet-300" 
-                                  : "border-gray-100 dark:border-gray-700 hover:border-violet-200 dark:hover:border-gray-600"
-                          )}
-                      >
-                          {theme === 'light' ? <Sun size={24}/> : theme === 'dark' ? <Moon size={24}/> : <Monitor size={24}/>}
-                          <span className="text-xs font-bold capitalize">{theme}</span>
-                      </button>
-                  ))}
-              </div>
-          </section>
-
-          <section className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-sm border border-gray-100 dark:border-gray-700">
-              <h3 className="text-lg font-bold mb-6 flex items-center gap-2"><ImageIcon className="text-pink-500"/> 背景风格</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                  <button 
-                      onClick={() => { const n = {...settings, backgroundMode: 'aurora' as const}; setLocalSettings(n); saveSettings(n); }}
-                      className={cn("h-24 rounded-xl relative overflow-hidden ring-2 ring-offset-2 dark:ring-offset-slate-800 transition-all", settings.backgroundMode === 'aurora' ? "ring-violet-500" : "ring-transparent")}
-                  >
-                      <div className="absolute inset-0 bg-gradient-to-br from-indigo-100 via-purple-100 to-pink-100 dark:from-slate-900 dark:via-purple-900/40 dark:to-slate-900"/>
-                      <span className="absolute inset-0 flex items-center justify-center font-bold text-gray-700 dark:text-white drop-shadow-md">极光 (Aurora)</span>
-                  </button>
-                  <button 
-                      onClick={() => { const n = {...settings, backgroundMode: 'monotone' as const}; setLocalSettings(n); saveSettings(n); }}
-                      className={cn("h-24 rounded-xl relative overflow-hidden ring-2 ring-offset-2 dark:ring-offset-slate-800 transition-all bg-gray-50 dark:bg-slate-950", settings.backgroundMode === 'monotone' ? "ring-violet-500" : "ring-transparent")}
-                  >
-                      <span className="absolute inset-0 flex items-center justify-center font-bold text-gray-500">纯净 (Pure)</span>
-                  </button>
-                  <label className={cn("h-24 rounded-xl relative overflow-hidden ring-2 ring-offset-2 dark:ring-offset-slate-800 transition-all cursor-pointer group", settings.backgroundMode === 'custom' ? "ring-violet-500" : "ring-transparent")}>
-                      {settings.customBackgroundImage ? (
-                          <img src={settings.customBackgroundImage} className="absolute inset-0 w-full h-full object-cover opacity-50 group-hover:opacity-70 transition-opacity"/>
-                      ) : (
-                          <div className="absolute inset-0 bg-gray-100 dark:bg-slate-800 flex flex-col items-center justify-center text-gray-400">
-                              <Upload size={20} className="mb-2"/>
-                          </div>
-                      )}
-                      <span className="absolute inset-0 flex items-center justify-center font-bold text-gray-700 dark:text-white drop-shadow-md z-10">自定义图片</span>
-                      <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, 'bg')}/>
-                  </label>
-              </div>
-
-              <div className="space-y-6">
-                   <div>
-                       <div className="flex justify-between text-sm font-bold text-gray-500 mb-2">
-                           <span>卡片透明度</span>
-                           <span>{settings.cardOpacity}%</span>
-                       </div>
-                       <input 
-                          type="range" min="20" max="100" 
-                          value={settings.cardOpacity} 
-                          onChange={(e) => { const n = {...settings, cardOpacity: Number(e.target.value)}; setLocalSettings(n); saveSettings(n); }}
-                          className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-violet-600"
-                       />
-                   </div>
-                   <div>
-                       <div className="flex justify-between text-sm font-bold text-gray-500 mb-2">
-                           <span>背景模糊 (Blur)</span>
-                           <span>{settings.backgroundBlur}px</span>
-                       </div>
-                       <input 
-                          type="range" min="0" max="50" 
-                          value={settings.backgroundBlur} 
-                          onChange={(e) => { const n = {...settings, backgroundBlur: Number(e.target.value)}; setLocalSettings(n); saveSettings(n); }}
-                          className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-violet-600"
-                       />
-                   </div>
-                   <div>
-                       <div className="flex justify-between text-sm font-bold text-gray-500 mb-2">
-                           <span>背景遮罩浓度</span>
-                           <span>{settings.backgroundMaskOpacity}%</span>
-                       </div>
-                       <input 
-                          type="range" min="0" max="90" 
-                          value={settings.backgroundMaskOpacity} 
-                          onChange={(e) => { const n = {...settings, backgroundMaskOpacity: Number(e.target.value)}; setLocalSettings(n); saveSettings(n); }}
-                          className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-violet-600"
-                       />
-                   </div>
-                   <div className="flex items-center justify-between pt-4 border-t border-gray-100 dark:border-gray-700">
-                       <span className="font-bold text-sm text-gray-700 dark:text-gray-300">启用 AI 每日一句</span>
-                       <button 
-                          onClick={() => { const n = {...settings, enableAiGreeting: !settings.enableAiGreeting}; setLocalSettings(n); saveSettings(n); }}
-                          className={cn("w-12 h-6 rounded-full transition-colors relative", settings.enableAiGreeting ? "bg-violet-600" : "bg-gray-200 dark:bg-gray-700")}
-                       >
-                           <div className={cn("absolute top-1 w-4 h-4 rounded-full bg-white transition-transform", settings.enableAiGreeting ? "left-7" : "left-1")}/>
-                       </button>
-                   </div>
-              </div>
           </section>
       </div>
   );
@@ -676,13 +655,14 @@ export const App: React.FC = () => {
                <div className="mt-8 pt-8 border-t border-gray-100 dark:border-gray-700">
                    <h4 className="font-bold text-sm text-gray-500 mb-4">添加新引擎</h4>
                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                       <div className="md:col-span-2">
+                       <div className="md:col-span-2 relative">
                             <input 
                               placeholder="URL (e.g. https://duckduckgo.com)" 
                               value={engineForm.baseUrl || ''} 
                               onChange={e => { setEngineForm({...engineForm, baseUrl: e.target.value}); autoFillSearchEngine(e.target.value); }} 
                               className="w-full p-3 rounded-xl bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-gray-700 outline-none"
                             />
+                            {engineForm.baseUrl && <div className="absolute right-3 top-3 text-emerald-500 pointer-events-none text-xs font-bold flex items-center gap-1"><Sparkles size={12}/> 智能识别开启</div>}
                        </div>
                        <input 
                           placeholder="名称 (e.g. DuckDuckGo)" 
@@ -743,6 +723,183 @@ export const App: React.FC = () => {
                   </div>
               )}
           </div>
+      </div>
+  );
+
+  const renderAISettings = () => (
+      <div className="space-y-8 animate-fade-in">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-sm border border-gray-100 dark:border-gray-700">
+               <h3 className="text-lg font-bold mb-6 flex items-center gap-2"><Bot className="text-violet-500"/> AI 模型配置</h3>
+               <p className="text-sm text-gray-500 mb-4">配置用于生成链接推荐、智能图标和欢迎语的 AI 服务。</p>
+               
+               <div className="space-y-3">
+                   {settings.aiConfigs.map(config => (
+                       <div key={config.id} className="flex items-center gap-4 p-4 rounded-xl border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-slate-900/50">
+                           <div className={cn("w-10 h-10 rounded-full flex items-center justify-center", config.type === 'google' ? "bg-blue-100 text-blue-600" : "bg-green-100 text-green-600")}>
+                               {config.type === 'google' ? <Zap size={20}/> : <Bot size={20}/>}
+                           </div>
+                           <div className="flex-1">
+                               <div className="font-bold text-gray-800 dark:text-gray-200 flex items-center gap-2">
+                                   {config.name}
+                                   {config.isActive && <span className="text-[10px] bg-emerald-100 text-emerald-600 px-2 py-0.5 rounded-full">使用中</span>}
+                               </div>
+                               <div className="text-xs text-gray-400 font-mono mt-0.5">{config.model}</div>
+                           </div>
+                           <div className="flex gap-2">
+                               <button 
+                                  onClick={() => {
+                                      const newConfigs = settings.aiConfigs.map(c => ({...c, isActive: c.id === config.id}));
+                                      const n = {...settings, aiConfigs: newConfigs};
+                                      setLocalSettings(n); saveSettings(n);
+                                  }}
+                                  disabled={config.isActive}
+                                  className={cn("px-3 py-1.5 rounded-lg text-xs font-bold transition-colors", config.isActive ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400 opacity-50 cursor-default" : "bg-white dark:bg-slate-800 border hover:border-violet-500 hover:text-violet-500")}
+                               >
+                                  {config.isActive ? "默认" : "设为默认"}
+                               </button>
+                               <button 
+                                  onClick={() => setEditingAiConfig(config)}
+                                  className="p-2 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg"
+                               >
+                                  <Settings size={16}/>
+                               </button>
+                           </div>
+                       </div>
+                   ))}
+               </div>
+
+               <button 
+                  onClick={handleAddAiProvider}
+                  className="mt-4 w-full py-3 bg-white dark:bg-slate-800 border-2 border-dashed border-gray-200 dark:border-gray-700 hover:border-violet-500 hover:text-violet-600 text-gray-400 font-bold rounded-xl transition-colors flex items-center justify-center gap-2"
+               >
+                   <Plus size={18}/> 添加 AI 服务商
+               </button>
+          </div>
+      </div>
+  );
+
+  const renderAppearance = () => (
+      <div className="space-y-8 animate-fade-in">
+          <section className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-sm border border-gray-100 dark:border-gray-700">
+               <h3 className="text-lg font-bold mb-6 flex items-center gap-2"><Palette className="text-pink-500"/> 主题与背景</h3>
+               
+               <div className="space-y-6">
+                   <div>
+                      <label className="block text-sm font-bold text-gray-500 mb-3">色彩模式</label>
+                      <div className="flex bg-gray-50 dark:bg-slate-900 p-1 rounded-xl border border-gray-200 dark:border-gray-700">
+                          {(['light', 'dark', 'system'] as const).map(m => (
+                              <button 
+                                  key={m}
+                                  onClick={() => { const n = {...settings, theme: m}; setLocalSettings(n); saveSettings(n); }}
+                                  className={cn("flex-1 py-2 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-2", settings.theme === m ? "bg-white dark:bg-slate-700 shadow-sm text-violet-600" : "text-gray-400 hover:text-gray-600")}
+                              >
+                                  {m === 'light' && <Sun size={16}/>}
+                                  {m === 'dark' && <Moon size={16}/>}
+                                  {m === 'system' && <Monitor size={16}/>}
+                                  <span className="capitalize">{m === 'system' ? '系统' : m === 'light' ? '亮色' : '暗色'}</span>
+                              </button>
+                          ))}
+                      </div>
+                   </div>
+
+                   <div>
+                      <label className="block text-sm font-bold text-gray-500 mb-3">背景风格</label>
+                      <div className="grid grid-cols-3 gap-3">
+                          {[
+                              { id: 'aurora', label: '极光', icon: Sparkles },
+                              { id: 'monotone', label: '纯净', icon: LayoutGrid },
+                              { id: 'custom', label: '自定义', icon: ImageIcon },
+                          ].map((item) => (
+                              <button
+                                  key={item.id}
+                                  onClick={() => { const n = {...settings, backgroundMode: item.id as any}; setLocalSettings(n); saveSettings(n); }}
+                                  className={cn("flex flex-col items-center justify-center gap-2 py-4 rounded-xl border-2 transition-all", settings.backgroundMode === item.id ? "border-violet-500 bg-violet-50 dark:bg-violet-900/20 text-violet-600" : "border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-slate-900 text-gray-400 hover:border-gray-300")}
+                              >
+                                  <item.icon size={24}/>
+                                  <span className="text-xs font-bold">{item.label}</span>
+                              </button>
+                          ))}
+                      </div>
+                   </div>
+
+                   {settings.backgroundMode === 'custom' && (
+                       <div className="bg-gray-50 dark:bg-slate-900/50 p-4 rounded-xl border border-gray-100 dark:border-gray-700 animate-fade-in">
+                           <div className="flex items-center gap-4">
+                               {settings.customBackgroundImage ? (
+                                   <img src={settings.customBackgroundImage} className="w-20 h-20 rounded-lg object-cover bg-gray-200"/>
+                               ) : (
+                                   <div className="w-20 h-20 rounded-lg bg-gray-200 dark:bg-slate-800 flex items-center justify-center text-gray-400"><ImageIcon size={24}/></div>
+                               )}
+                               <div className="flex-1">
+                                   <input 
+                                       placeholder="图片 URL" 
+                                       value={settings.customBackgroundImage || ''}
+                                       onChange={(e) => { const n = {...settings, customBackgroundImage: e.target.value}; setLocalSettings(n); saveSettings(n); }}
+                                       className="w-full p-2 rounded-lg text-sm border border-gray-200 dark:border-gray-700 outline-none mb-2 bg-white dark:bg-slate-900"
+                                   />
+                                   <label className="inline-flex items-center gap-2 px-3 py-1.5 bg-gray-200 dark:bg-slate-700 rounded-lg text-xs font-bold cursor-pointer hover:bg-gray-300 dark:hover:bg-slate-600 transition-colors">
+                                       <Upload size={14}/> 上传图片
+                                       <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, 'bg')}/>
+                                   </label>
+                               </div>
+                           </div>
+                       </div>
+                   )}
+                   
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                       <div>
+                           <div className="flex justify-between mb-2">
+                               <label className="text-sm font-bold text-gray-500">卡片透明度</label>
+                               <span className="text-xs font-mono bg-gray-100 dark:bg-slate-700 px-2 rounded text-gray-600 dark:text-gray-300">{settings.cardOpacity}%</span>
+                           </div>
+                           <input 
+                              type="range" min="20" max="100" 
+                              value={settings.cardOpacity} 
+                              onChange={(e) => { const n = {...settings, cardOpacity: Number(e.target.value)}; setLocalSettings(n); saveSettings(n); }}
+                              className="w-full accent-violet-600 h-2 bg-gray-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
+                           />
+                       </div>
+                       
+                       <div>
+                           <div className="flex justify-between mb-2">
+                               <label className="text-sm font-bold text-gray-500">背景模糊度</label>
+                               <span className="text-xs font-mono bg-gray-100 dark:bg-slate-700 px-2 rounded text-gray-600 dark:text-gray-300">{settings.backgroundBlur}px</span>
+                           </div>
+                           <input 
+                              type="range" min="0" max="50" 
+                              value={settings.backgroundBlur} 
+                              onChange={(e) => { const n = {...settings, backgroundBlur: Number(e.target.value)}; setLocalSettings(n); saveSettings(n); }}
+                              className="w-full accent-violet-600 h-2 bg-gray-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
+                           />
+                       </div>
+
+                        <div>
+                           <div className="flex justify-between mb-2">
+                               <label className="text-sm font-bold text-gray-500">背景遮罩浓度</label>
+                               <span className="text-xs font-mono bg-gray-100 dark:bg-slate-700 px-2 rounded text-gray-600 dark:text-gray-300">{settings.backgroundMaskOpacity}%</span>
+                           </div>
+                           <input 
+                              type="range" min="0" max="90" 
+                              value={settings.backgroundMaskOpacity} 
+                              onChange={(e) => { const n = {...settings, backgroundMaskOpacity: Number(e.target.value)}; setLocalSettings(n); saveSettings(n); }}
+                              className="w-full accent-violet-600 h-2 bg-gray-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
+                           />
+                       </div>
+
+                       <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-slate-900 rounded-xl border border-gray-100 dark:border-gray-700">
+                           <span className="text-sm font-bold text-gray-600 dark:text-gray-300 flex items-center gap-2">
+                               <Sparkles size={16} className="text-amber-500"/> AI 每日欢迎语
+                           </span>
+                           <button 
+                              onClick={() => { const n = {...settings, enableAiGreeting: !settings.enableAiGreeting}; setLocalSettings(n); saveSettings(n); }}
+                              className={cn("w-12 h-6 rounded-full p-1 transition-colors relative", settings.enableAiGreeting ? "bg-violet-500" : "bg-gray-300 dark:bg-slate-700")}
+                           >
+                               <div className={cn("w-4 h-4 bg-white rounded-full shadow-sm transition-transform", settings.enableAiGreeting ? "translate-x-6" : "translate-x-0")}/>
+                           </button>
+                       </div>
+                   </div>
+               </div>
+          </section>
       </div>
   );
 
@@ -877,16 +1034,21 @@ export const App: React.FC = () => {
                 <footer className="py-10 text-center border-t border-gray-100 dark:border-white/5 mt-20 space-y-6">
                     <div className="flex justify-center gap-4">
                         {settings.socialLinks?.map(link => (
-                            <a 
+                            <button 
                             key={link.id}
-                            href={link.url} 
-                            target="_blank" 
-                            rel="noreferrer" 
-                            className="w-10 h-10 rounded-full bg-gray-100 dark:bg-white/10 text-gray-600 dark:text-gray-300 flex items-center justify-center hover:bg-violet-600 hover:text-white transition-all shadow-sm"
+                            onClick={() => {
+                                if (link.qrCode) {
+                                    setShowQrModal(link.qrCode);
+                                } else {
+                                    window.open(link.url, '_blank');
+                                }
+                            }}
+                            className="w-10 h-10 rounded-full bg-gray-100 dark:bg-white/10 text-gray-600 dark:text-gray-300 flex items-center justify-center hover:bg-violet-600 hover:text-white transition-all shadow-sm relative group"
                             title={link.platform}
                             >
                                 <Icon name={link.icon} size={20}/>
-                            </a>
+                                {link.qrCode && <div className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-500 rounded-full border-2 border-white dark:border-slate-900" />}
+                            </button>
                         ))}
                     </div>
                     <div className="text-sm text-gray-400 dark:text-gray-500 font-medium" dangerouslySetInnerHTML={{ __html: settings.footerHtml || '' }}></div>
@@ -908,6 +1070,17 @@ export const App: React.FC = () => {
                          {loginError && <p className="text-red-500 text-sm font-bold">{loginError}</p>}
                          <button type="submit" className="w-full py-3 bg-violet-600 text-white rounded-xl font-bold hover:bg-violet-700">登录</button>
                      </form>
+                </Modal>
+            )}
+
+            {showQrModal && (
+                <Modal title="扫描二维码" onClose={() => setShowQrModal(null)} icon={<ScanLine size={20}/>}>
+                    <div className="p-8 flex flex-col items-center justify-center">
+                        <div className="p-4 bg-white rounded-xl shadow-lg border border-gray-100">
+                            <img src={showQrModal} alt="QR Code" className="max-w-[250px] max-h-[250px] object-contain" />
+                        </div>
+                        <p className="mt-4 text-sm text-gray-500 font-bold">请使用手机 App 扫码关注</p>
+                    </div>
                 </Modal>
             )}
         </div>
