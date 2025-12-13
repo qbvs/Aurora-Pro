@@ -1,3 +1,4 @@
+
 import { Category, AppSettings, SearchEngine, AIProviderConfig } from './types';
 
 export const INITIAL_SEARCH_ENGINES: SearchEngine[] = [
@@ -45,13 +46,21 @@ const DEFAULT_AI_CONFIGS: AIProviderConfig[] = [
 export const INITIAL_SETTINGS: AppSettings = {
   appName: 'Aurora Pro',
   appIcon: 'Zap',
+  logoMode: 'icon',
   theme: 'system',
   openInNewTab: true,
   activeSearchEngineId: 'se-google',
   aiConfigs: DEFAULT_AI_CONFIGS,
   cardOpacity: 80,
   backgroundMode: 'aurora',
+  backgroundBlur: 0,
+  backgroundMaskOpacity: 0,
   enableAiGreeting: true,
+  footerHtml: '© 2024 Aurora Pro Navigation. Designed for Geeks.',
+  socialLinks: [
+      { id: 'sl-1', platform: 'GitHub', url: 'https://github.com', icon: 'Github' },
+      { id: 'sl-2', platform: 'Email', url: 'mailto:hello@example.com', icon: 'Mail' }
+  ]
 };
 
 export const INITIAL_DATA: Category[] = [
@@ -66,7 +75,9 @@ export const INITIAL_DATA: Category[] = [
         url: 'https://github.com',
         description: '代码托管平台',
         color: '#181717',
-        clickCount: 10
+        clickCount: 10,
+        pros: '开源社区',
+        cons: '门槛较高'
       },
       {
         id: 'l-2',
@@ -74,7 +85,9 @@ export const INITIAL_DATA: Category[] = [
         url: 'https://chat.openai.com',
         description: 'AI 助手',
         color: '#10A37F',
-        clickCount: 8
+        clickCount: 8,
+        pros: '智能强大',
+        cons: '需魔法'
       },
       {
         id: 'l-3',
@@ -82,7 +95,9 @@ export const INITIAL_DATA: Category[] = [
         url: 'https://vercel.com',
         description: '前端部署神器',
         color: '#000000',
-        clickCount: 6
+        clickCount: 6,
+        pros: '免费额度',
+        cons: '国内稍慢'
       },
       {
         id: 'l-4',
@@ -90,7 +105,9 @@ export const INITIAL_DATA: Category[] = [
         url: 'https://youtube.com',
         description: '视频娱乐',
         color: '#FF0000',
-        clickCount: 5
+        clickCount: 5,
+        pros: '内容丰富',
+        cons: '广告多'
       },
     ],
   },

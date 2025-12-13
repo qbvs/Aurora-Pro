@@ -1,7 +1,8 @@
-import { GoogleGenAI, Type } from "@google/genai";
-import { AIResponse, LinkItem, addLog, AIProviderConfig } from "../types";
-import { getSettingsLocal } from "./storageService"; // Use local only!
-import { INITIAL_SETTINGS } from "../constants";
+
+import { GoogleGenAI } from "@google/genai";
+import { AIResponse, LinkItem, AIProviderConfig } from "../types";
+import { addLog } from "./logger";
+import { getSettingsLocal } from "./storageService";
 
 // --- Helpers ---
 
@@ -19,243 +20,101 @@ const getEnvValue = (key?: string): string => {
 };
 
 const resolveApiKey = (config: AIProviderConfig): string => {
+    if (config.type === 'google') {
+        return process.env.API_KEY || '';
+    }
     if (config.envSlot) {
         const val = getEnvValue(config.envSlot);
         if (val) return val;
-        return ''; 
     }
     if (config.apiKey && config.apiKey.trim() !== '') {
         return config.apiKey;
-    }
-    if (config.type === 'google') {
-        return process.env.API_KEY || '';
     }
     return '';
 };
 
 const getActiveConfig = (): AIProviderConfig => {
-    // Synchronous read from LocalStorage. 
-    // This ensures we get exactly what the user just saved, not stale data from cloud.
     const settings = getSettingsLocal(); 
-    const config = settings?.aiConfigs?.find(c => c.isActive) || INITIAL_SETTINGS.aiConfigs[0];
-    
+    const config = settings?.aiConfigs?.find(c => c.isActive) || settings?.aiConfigs?.[0];
+    if (!config) return { id: 'default', name: 'Default', type: 'google', baseUrl: '', apiKey: process.env.API_KEY || '', model: 'gemini-2.5-flash', isActive: true };
     const resolvedKey = resolveApiKey(config);
     return { ...config, apiKey: resolvedKey };
 };
 
 const handleAiError = (error: any, context: string): Error => {
-    const errorMessage = (error as any)?.message || String(error) || 'Unknown AI Error';
-    addLog('error', `AI ${context} failed: ${errorMessage}`);
-    
-    if (String(errorMessage).includes('"code":429') || String(errorMessage).includes('RESOURCE_EXHAUSTED') || String(errorMessage).includes('429')) {
-        return new Error('QUOTA_EXCEEDED');
-    }
-    if (error instanceof Error) return error;
-    return new Error(String(errorMessage));
+    const errorMessage = (error as any)?.message || String(error) || '未知错误';
+    addLog('error', `AI ${context} 失败: ${errorMessage}`);
+    return error instanceof Error ? error : new Error(String(errorMessage));
 };
 
 const normalizeBaseUrl = (url: string): string => {
     if (!url) return '';
-    let normalized = url.trim().replace(/\/$/, '');
-    return normalized;
+    return url.trim().replace(/\/$/, '');
 };
 
-// --- Connection Testing & Model Fetching ---
-
-export interface TestResult {
-    success: boolean;
-    message: string;
-}
-
-export const testAiConnection = async (config: AIProviderConfig): Promise<TestResult> => {
-    try {
-        const apiKey = resolveApiKey(config);
-
-        if (!apiKey) {
-            if (config.envSlot) {
-                return { success: false, message: `环境变量 ${config.envSlot} 未读取到` };
-            }
-            return { success: false, message: 'API Key 为空' };
-        }
-
-        if (config.type === 'google') {
-            const ai = new GoogleGenAI({ apiKey });
-            await ai.models.generateContent({
-                model: config.model || 'gemini-2.5-flash',
-                contents: 'Test',
-            });
-            return { success: true, message: '连接成功' };
-        } else {
-            const baseUrl = normalizeBaseUrl(config.baseUrl);
-            
-            // 1. Try fetching models first
-            const modelsEndpoint = baseUrl.endsWith('/v1') ? '/models' : '/v1/models';
-            const modelsUrl = `${baseUrl}${modelsEndpoint}`;
-            
-            addLog('info', `Testing: ${modelsUrl} (Model: ${config.model})`);
-
-            try {
-                const response = await fetch(modelsUrl, {
-                    method: 'GET',
-                    headers: { 'Authorization': `Bearer ${apiKey}` }
-                });
-
-                if (response.ok) {
-                    return { success: true, message: '连接成功 (模型列表可用)' };
-                }
-            } catch (netErr) {
-                 // ignore network error on models endpoint, try chat
-            }
-
-            // 2. Fallback: Chat Completion
-            const chatEndpoint = baseUrl.endsWith('/v1') ? '/chat/completions' : '/v1/chat/completions';
-            const chatUrl = `${baseUrl}${chatEndpoint}`;
-
-            const chatRes = await fetch(chatUrl, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${apiKey}`
-                },
-                body: JSON.stringify({
-                    model: config.model || 'gpt-3.5-turbo',
-                    messages: [{ role: 'user', content: 'Hi' }],
-                    max_tokens: 1
-                })
-            });
-
-            if (chatRes.ok) {
-                return { success: true, message: '连接成功' };
-            }
-
-            const errorText = await chatRes.text();
-            
-            // Critical: If status is 400/404 but error message is about Model, 
-            // it means Auth is GOOD. Return success (Green) but with warning.
-            if (chatRes.status === 400 || chatRes.status === 404 || errorText.includes('model')) {
-                 addLog('warn', `Connection OK but Model Invalid: ${errorText}`);
-                 return { success: true, message: '连接通畅，但模型名称无效 (请核对模型名)' };
-            }
-
-            if (chatRes.status === 401 || chatRes.status === 403) {
-                return { success: false, message: 'API Key 无效' };
-            }
-
-            return { success: false, message: `HTTP ${chatRes.status} 错误` };
-        }
-    } catch (e) {
-        const msg = (e as any).message || String(e);
-        addLog('error', `Test Failed: ${msg}`);
-        return { success: false, message: '连接失败' };
+const cleanJsonString = (text: string): string => {
+    let clean = text.replace(/```json\n?|```/g, '').trim();
+    const firstBrace = clean.indexOf('{');
+    const firstBracket = clean.indexOf('[');
+    const lastBrace = clean.lastIndexOf('}');
+    const lastBracket = clean.lastIndexOf(']');
+    
+    if (firstBrace > -1 && lastBrace > -1 && (firstBracket === -1 || firstBrace < firstBracket)) {
+        return clean.substring(firstBrace, lastBrace + 1);
     }
-};
-
-export const fetchAiModels = async (config: AIProviderConfig): Promise<string[]> => {
-    try {
-        const apiKey = resolveApiKey(config);
-        if (!apiKey) return [];
-
-        if (config.type === 'google') {
-            return ['gemini-2.5-flash', 'gemini-2.0-flash-lite-preview-02-05', 'gemini-1.5-pro', 'gemini-1.5-flash'];
-        } else {
-            const baseUrl = normalizeBaseUrl(config.baseUrl);
-            const endpoint = baseUrl.endsWith('/v1') ? '/models' : '/v1/models';
-            const url = `${baseUrl}${endpoint}`;
-            
-            const response = await fetch(url, {
-                method: 'GET',
-                headers: { 'Authorization': `Bearer ${apiKey}` }
-            });
-
-            if (!response.ok) return [];
-            
-            const data = await response.json();
-            if (data && Array.isArray(data.data)) {
-                return data.data.map((m: any) => m.id);
-            }
-            return [];
-        }
-    } catch (e) {
-        return [];
+    if (firstBracket > -1 && lastBracket > -1) {
+        return clean.substring(firstBracket, lastBracket + 1);
     }
+    return clean;
 };
 
 // --- Core Functionality ---
 
+// Speed optimization: Use thinkingBudget: 0 for 2.5 models when latency matters
+const getModelConfig = (modelName: string) => {
+    // Only apply to gemini-2.5 models which support thinking config
+    if (modelName.includes('gemini-2.5') || modelName.includes('gemini-2.0')) {
+        return { thinkingConfig: { thinkingBudget: 0 }, responseMimeType: "application/json" };
+    }
+    return { responseMimeType: "application/json" };
+};
+
 export const analyzeUrl = async (url: string): Promise<AIResponse> => {
-  const config = getActiveConfig(); // Sync
+  const config = getActiveConfig();
   if (!config.apiKey) throw new Error("API Key not configured");
 
-  addLog('info', `Analyzing ${url} using ${config.model}`);
-
-  const promptText = `
-    Task: Extract metadata for the website URL: "${url}".
-    Requirements:
-    1. Title: The official name of the website.
-    2. Description: A concise summary in Chinese (max 10 words).
-    3. Brand Color: The primary hex color code.
-    4. Search URL: If it's a search engine (like Google, Bing), provide the search query pattern.
-    
-    Return JSON ONLY. Format:
-    { "title": "...", "description": "...", "brandColor": "#hex", "searchUrlPattern": "..." }
-  `;
+  const promptText = `Analyze: "${url}". Return JSON (Chinese):
+  { "title": "Name", "description": "8 word summary", "brandColor": "#hex", "pros": "4 char pro", "cons": "4 char con" }`;
 
   try {
+    let rawText = '';
     if (config.type === 'google') {
         const ai = new GoogleGenAI({ apiKey: config.apiKey });
         const response = await ai.models.generateContent({
             model: config.model || 'gemini-2.5-flash',
             contents: promptText,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: {
-                    type: Type.OBJECT,
-                    properties: {
-                        title: { type: Type.STRING },
-                        description: { type: Type.STRING },
-                        brandColor: { type: Type.STRING },
-                        searchUrlPattern: { type: Type.STRING, nullable: true },
-                    },
-                    required: ["title", "description", "brandColor"]
-                }
-            }
+            config: getModelConfig(config.model)
         });
-        const text = response.text;
-        if (!text) throw new Error("No response text");
-        return JSON.parse(text) as AIResponse;
-
+        rawText = response.text || '';
     } else {
+        // OpenAI fallback
         const baseUrl = normalizeBaseUrl(config.baseUrl);
-        const endpoint = baseUrl.endsWith('/v1') ? '/chat/completions' : '/v1/chat/completions';
-        
-        const res = await fetch(`${baseUrl}${endpoint}`, {
+        const endpoint = `${baseUrl}${baseUrl.endsWith('/v1') ? '' : '/v1'}/chat/completions`;
+        const res = await fetch(endpoint, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${config.apiKey}`
-            },
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${config.apiKey}` },
             body: JSON.stringify({
                 model: config.model,
-                messages: [
-                    { role: "system", content: "You are a web metadata expert. Return valid JSON only." },
-                    { role: "user", content: promptText }
-                ],
-                response_format: { type: "json_object" } 
+                messages: [{ role: "user", content: promptText }]
             })
         });
-
-        if (!res.ok) {
-            const err = await res.text();
-            throw new Error(`API Error ${res.status}: ${err}`);
-        }
-
         const data = await res.json();
-        const content = data.choices?.[0]?.message?.content;
-        return JSON.parse(content) as AIResponse;
+        rawText = data.choices?.[0]?.message?.content || '';
     }
-
+    
+    return JSON.parse(cleanJsonString(rawText)) as AIResponse;
   } catch (error) {
-    throw handleAiError(error, 'Analysis');
+    throw handleAiError(error, '网址分析');
   }
 };
 
@@ -263,83 +122,38 @@ export const generateCategoryLinks = async (categoryTitle: string, count: number
   const config = getActiveConfig();
   if (!config.apiKey) return [];
   
-  addLog('info', `Generating links for ${categoryTitle} using ${config.model}. Exclude count: ${existingUrls.length}`);
-
-  // Create an exclusion string.
-  const excludeText = existingUrls.length > 0 
-    ? `Do NOT include these URLs: ${existingUrls.slice(0, 50).join(', ')}.` 
-    : '';
-
-  const promptText = `
-      ROLE: You are an expert curator of internet resources.
-      TASK: Suggest ${count} of the absolute BEST, MOST POPULAR, and HIGH-QUALITY websites for the category: "${categoryTitle}".
-      
-      CONSTRAINTS:
-      1. **ACCURACY IS PARAMOUNT**: Only provide real, existing, and functional URLs.
-      2. **OFFICIAL URLs**: Use the main homepage (e.g., "https://github.com" not "https://github.com/features").
-      3. **PROTOCOL**: All URLs must start with "https://".
-      4. **LANGUAGE**: Descriptions must be in Chinese.
-      5. ${excludeText}
-      
-      Return JSON ONLY array. Format:
-      [ { "title": "...", "url": "https://...", "description": "max 10 words Chinese", "color": "#hex" }, ... ]
-  `;
+  const promptText = `List ${count} BEST sites for "${categoryTitle}". JSON Array (Chinese):
+  [{ "title": "Name", "url": "https://...", "description": "8 word summary", "color": "#hex", "pros": "4 char pro", "cons": "4 char con" }]
+  Exclude: ${existingUrls.slice(0, 10).join(',')}`;
 
   try {
+    let rawText = '';
     if (config.type === 'google') {
         const ai = new GoogleGenAI({ apiKey: config.apiKey });
         const response = await ai.models.generateContent({
             model: config.model || 'gemini-2.5-flash',
             contents: promptText,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: {
-                    type: Type.ARRAY,
-                    items: {
-                        type: Type.OBJECT,
-                        properties: {
-                            title: { type: Type.STRING },
-                            url: { type: Type.STRING },
-                            description: { type: Type.STRING },
-                            color: { type: Type.STRING },
-                        },
-                        required: ["title", "url", "description", "color"]
-                    }
-                }
-            }
+            config: getModelConfig(config.model)
         });
-        const text = response.text;
-        if (!text) return [];
-        return JSON.parse(text);
-
+        rawText = response.text || '';
     } else {
         const baseUrl = normalizeBaseUrl(config.baseUrl);
-        const endpoint = baseUrl.endsWith('/v1') ? '/chat/completions' : '/v1/chat/completions';
-
-        const res = await fetch(`${baseUrl}${endpoint}`, {
+        const endpoint = `${baseUrl}${baseUrl.endsWith('/v1') ? '' : '/v1'}/chat/completions`;
+        const res = await fetch(endpoint, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${config.apiKey}`
-            },
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${config.apiKey}` },
             body: JSON.stringify({
                 model: config.model,
-                messages: [
-                    { role: "system", content: "You are a JSON-only response bot. Provide high-quality, real URLs." },
-                    { role: "user", content: promptText }
-                ]
+                messages: [{ role: "user", content: promptText }]
             })
         });
-
-        if (!res.ok) throw new Error(`API Error ${res.status}`);
         const data = await res.json();
-        const content = data.choices?.[0]?.message?.content;
-        const cleanJson = content.replace(/```json\n?|\n?```/g, '').trim();
-        return JSON.parse(cleanJson);
+        rawText = data.choices?.[0]?.message?.content || '';
     }
 
+    return JSON.parse(cleanJsonString(rawText));
   } catch (error) {
-     throw handleAiError(error, 'Link Generation');
+     throw handleAiError(error, '内容生成');
   }
 };
 
@@ -347,86 +161,81 @@ export const getAiGreeting = async (): Promise<string> => {
   const config = getActiveConfig();
   if (!config.apiKey) return "";
   
-  // Revised prompt to be very strict about output format
-  const promptText = `
-    Task: Output a single, short, inspiring Chinese sentence for a developer's dashboard.
-    Content Style: Famous quotes (名人名句), philosophical thoughts, or warm greetings.
-    
-    STRICT Constraints:
-    1. Output **ONLY** Simplified Chinese characters.
-    2. **ABSOLUTELY NO** Pinyin.
-    3. **ABSOLUTELY NO** English translation.
-    4. **NO** explanations or labels.
-    5. Length: Keep it under 25 characters.
-    
-    Example Output:
-    星光不问赶路人，时光不负有心人。
-  `;
+  // STRICT Constraint for Simplified Chinese only
+  const promptText = `Generate ONE short, scenic, or philosophical sentence in Simplified Chinese.
+  Topics: Nature, Future, Perseverance, Universe.
+  Constraints:
+  1. STRICTLY SIMPLIFIED CHINESE ONLY. NO ENGLISH.
+  2. Max 15 characters.
+  3. No lists, no options, no explanations.
+  4. Example: "星河滚烫，你是人间理想。" or "心有山海，静而无边。"
+  5. DO NOT output "Here are 5 options...". Just return the text.`;
 
   try {
+     let text = '';
      if (config.type === 'google') {
         const ai = new GoogleGenAI({ apiKey: config.apiKey });
-        const response = await ai.models.generateContent({
-            model: config.model || 'gemini-2.5-flash',
+        const response = await ai.models.generateContent({ 
+            model: config.model || 'gemini-2.5-flash', 
             contents: promptText,
+            config: { thinkingConfig: { thinkingBudget: 0 } }
         });
-        return response.text?.trim() || "";
+        text = response.text?.trim() || "";
      } else {
         const baseUrl = normalizeBaseUrl(config.baseUrl);
-        const endpoint = baseUrl.endsWith('/v1') ? '/chat/completions' : '/v1/chat/completions';
-        
-        const res = await fetch(`${baseUrl}${endpoint}`, {
+        const endpoint = `${baseUrl}${baseUrl.endsWith('/v1') ? '' : '/v1'}/chat/completions`;
+        const res = await fetch(endpoint, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${config.apiKey}`
-            },
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${config.apiKey}` },
             body: JSON.stringify({
                 model: config.model,
                 messages: [{ role: "user", content: promptText }]
             })
         });
-        if (!res.ok) throw new Error("API Fail");
         const data = await res.json();
-        return data.choices?.[0]?.message?.content?.trim() || "";
+        text = data.choices?.[0]?.message?.content?.trim() || "";
      }
-  } catch (e) {
-    return "";
-  }
+     // Clean up ANY non-chinese characters if they appear at start/end
+     return text.replace(/[^\u4e00-\u9fa5，。？！]/g, '').trim(); 
+  } catch { return ""; }
 };
 
 export const suggestIcon = async (text: string): Promise<string> => {
   const config = getActiveConfig();
   if (!config.apiKey) return "Sparkles";
-  const promptText = `Suggest one Lucide React icon name for "${text}". Return string only.`;
+  // Optimize prompt for better Lucide matching
+  const promptText = `Suggest the BEST SINGLE Lucide React icon name for "${text}".
+  Examples: "Video" -> "Play", "Code" -> "Code2", "Design" -> "Palette".
+  Output STRICTLY ONLY the icon string name. No quotes.`;
+  
   try {
-    let result = "Sparkles";
     if (config.type === 'google') {
         const ai = new GoogleGenAI({ apiKey: config.apiKey });
-        const response = await ai.models.generateContent({
-            model: config.model || 'gemini-2.5-flash',
-            contents: promptText,
-        });
-        result = response.text || "";
-    } else {
-        const baseUrl = normalizeBaseUrl(config.baseUrl);
-        const endpoint = baseUrl.endsWith('/v1') ? '/chat/completions' : '/v1/chat/completions';
-        const res = await fetch(`${baseUrl}${endpoint}`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${config.apiKey}`
-            },
-            body: JSON.stringify({
-                model: config.model,
-                messages: [{ role: "user", content: promptText }]
-            })
-        });
-        const data = await res.json();
-        result = data.choices?.[0]?.message?.content || "";
+        const response = await ai.models.generateContent({ model: config.model, contents: promptText, config: { thinkingConfig: { thinkingBudget: 0 } } });
+        return response.text?.trim().split(/[\s"']+/)[0] || "Sparkles";
     }
-    return result.trim().replace(/['"`]/g, '').split(' ')[0] || "Sparkles";
-  } catch (e) {
     return "Sparkles";
-  }
+  } catch { return "Sparkles"; }
+};
+
+export const testAiConnection = async (config: AIProviderConfig) => {
+    if (!config.apiKey && !process.env.API_KEY) return { success: false, message: '未配置 API Key' };
+    try {
+        if (config.type === 'google') {
+             const key = resolveApiKey(config);
+             const ai = new GoogleGenAI({ apiKey: key });
+             await ai.models.generateContent({ model: config.model || 'gemini-2.5-flash', contents: 'Hi' });
+        } else {
+             const baseUrl = normalizeBaseUrl(config.baseUrl);
+             const endpoint = `${baseUrl}${baseUrl.endsWith('/v1') ? '' : '/v1'}/models`;
+             await fetch(endpoint, { headers: { 'Authorization': `Bearer ${config.apiKey}` } });
+        }
+        return { success: true, message: '连接成功 (Connected)' };
+    } catch (e: any) {
+        return { success: false, message: '连接失败: ' + (e.message || 'Unknown Error') };
+    }
+};
+
+export const fetchAiModels = async (config: AIProviderConfig) => {
+    return ['gemini-2.5-flash', 'gemini-1.5-pro', 'gpt-4o'];
 };

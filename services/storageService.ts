@@ -1,4 +1,5 @@
-import { Category, AppSettings, SearchEngine, addLog } from '../types';
+import { Category, AppSettings, SearchEngine } from '../types';
+import { addLog } from './logger';
 
 const DATA_KEY = 'aurora_data_v1';
 const SETTINGS_KEY = 'aurora_settings_v1';
