@@ -1,3 +1,4 @@
+
 import { Category, AppSettings, SearchEngine } from '../types';
 import { addLog } from './logger';
 
@@ -5,62 +6,83 @@ const DATA_KEY = 'aurora_data_v1';
 const SETTINGS_KEY = 'aurora_settings_v1';
 const ENGINES_KEY = 'aurora_engines_v1';
 
-// Helper to check if KV is configured
+// Helper to check if any KV is configured
 export const isKVConfigured = (): boolean => {
-  const url = process.env.KV_REST_API_URL;
-  const token = process.env.KV_REST_API_TOKEN;
-  return !!(url && url.length > 0 && token && token.length > 0);
+  const isVercel = !!(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
+  const isCloudflare = !!(process.env.CF_ACCOUNT_ID && process.env.CF_NAMESPACE_ID && process.env.CF_API_TOKEN);
+  return isVercel || isCloudflare;
 };
 
-// --- Cloud Sync Helpers (Vercel KV REST API) ---
+// --- Cloud Sync Helpers (Vercel KV & Cloudflare KV REST API) ---
 
 const kvFetch = async (command: string, key: string, value?: any) => {
-  if (!isKVConfigured()) {
-      // Don't spam logs here, App.tsx handles the initial missing config warning.
-      return null;
-  }
+  const isVercel = !!(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
+  const isCloudflare = !!(process.env.CF_ACCOUNT_ID && process.env.CF_NAMESPACE_ID && process.env.CF_API_TOKEN);
 
-  const baseUrl = process.env.KV_REST_API_URL?.replace(/\/$/, '');
-  const url = `${baseUrl}/`;
-  const token = process.env.KV_REST_API_TOKEN;
+  if (!isVercel && !isCloudflare) return null;
 
   try {
-    const body = value !== undefined 
-      ? JSON.stringify([command, key, JSON.stringify(value)]) // SET
-      : JSON.stringify([command, key]); // GET
+    if (isCloudflare) {
+      // --- Cloudflare KV REST API Logic ---
+      const { CF_ACCOUNT_ID, CF_NAMESPACE_ID, CF_API_TOKEN } = process.env;
+      const baseUrl = `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/storage/kv/namespaces/${CF_NAMESPACE_ID}`;
+      const headers = { Authorization: `Bearer ${CF_API_TOKEN}` };
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-      body: body,
-    });
+      if (command.toUpperCase() === 'GET') {
+        const response = await fetch(`${baseUrl}/values/${key}`, { headers });
+        if (!response.ok) {
+          if (response.status === 404) return null; // Key not found is not an error
+          throw new Error(`Cloudflare GET Error (${response.status}): ${await response.text()}`);
+        }
+        return response.json(); // CF returns the value directly
+      } else if (command.toUpperCase() === 'SET') {
+        const response = await fetch(`${baseUrl}/values/${key}`, {
+            method: 'PUT',
+            headers: { ...headers, 'Content-Type': 'application/json' },
+            body: JSON.stringify(value)
+        });
+        if (!response.ok) throw new Error(`Cloudflare SET Error (${response.status}): ${await response.text()}`);
+        const result = await response.json();
+        return result.success ? value : null;
+      }
 
-    if (!response.ok) {
-        const errorText = await response.text().catch(() => 'Unknown Error');
-        addLog('error', `KV Sync Error (${response.status}): ${errorText.substring(0, 100)}`);
-        return null;
-    }
+    } else if (isVercel) {
+      // --- Vercel KV REST API Logic (Existing) ---
+      const baseUrl = process.env.KV_REST_API_URL?.replace(/\/$/, '');
+      const url = `${baseUrl}/`;
+      const token = process.env.KV_REST_API_TOKEN;
 
-    const result = await response.json();
-    if (result.error) {
-        addLog('error', `KV Command Error: ${result.error}`);
-        return null;
-    }
+      const body = value !== undefined 
+        ? JSON.stringify([command, key, JSON.stringify(value)])
+        : JSON.stringify([command, key]);
 
-    if (result.result) {
-       try {
-         return typeof result.result === 'string' ? JSON.parse(result.result) : result.result;
-       } catch {
-         return result.result;
-       }
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: body,
+      });
+
+      if (!response.ok) throw new Error(`Vercel KV Error (${response.status}): ${await response.text()}`);
+      
+      const result = await response.json();
+      if (result.error) throw new Error(`Vercel KV Command Error: ${result.error}`);
+
+      if (result.result) {
+         try {
+           return typeof result.result === 'string' ? JSON.parse(result.result) : result.result;
+         } catch {
+           return result.result;
+         }
+      }
     }
     return null;
   } catch (error) {
     const msg = (error as any)?.message || String(error);
-    addLog('error', `KV Network Exception: ${msg}`);
+    addLog('error', `KV Sync Exception: ${msg.substring(0, 150)}`);
     return null;
   }
 };
+
 
 // --- Generic Helpers ---
 
@@ -81,14 +103,11 @@ const getFromLocal = <T>(key: string): T | null => {
 
 export const saveCategories = async (categories: Category[]) => {
   saveToLocal(DATA_KEY, categories);
-  // Async cloud save (fire and forget)
   if (isKVConfigured()) kvFetch('SET', DATA_KEY, categories);
 };
 
 export const loadCategories = async (): Promise<Category[] | null> => {
-  // Always return local first for speed
-  const local = getFromLocal<Category[]>(DATA_KEY);
-  return local;
+  return getFromLocal<Category[]>(DATA_KEY);
 };
 
 export const syncCategoriesFromCloud = async (): Promise<Category[] | null> => {
@@ -108,14 +127,11 @@ export const saveSettings = async (settings: AppSettings) => {
   if (isKVConfigured()) kvFetch('SET', SETTINGS_KEY, settings);
 };
 
-// FAST READ: Only reads local storage. Used by AI Service to avoid race conditions.
 export const getSettingsLocal = (): AppSettings | null => {
     return getFromLocal<AppSettings>(SETTINGS_KEY);
 };
 
-// SLOW SYNC: Used by App on init.
 export const loadSettings = async (): Promise<AppSettings | null> => {
-  // Return local immediately for UI rendering if needed (handled by App.tsx state)
   return getFromLocal<AppSettings>(SETTINGS_KEY);
 };
 

@@ -1,3 +1,4 @@
+
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
@@ -16,8 +17,14 @@ export default defineConfig(({ mode }) => {
     define: {
       'process.env.API_KEY': JSON.stringify(env.API_KEY || ''),
       'process.env.ADMIN_PASSWORD': JSON.stringify(env.ADMIN_PASSWORD || ''),
+      // Vercel KV
       'process.env.KV_REST_API_URL': JSON.stringify(env.KV_REST_API_URL || ''),
       'process.env.KV_REST_API_TOKEN': JSON.stringify(env.KV_REST_API_TOKEN || ''),
+      // Cloudflare KV
+      'process.env.CF_ACCOUNT_ID': JSON.stringify(env.CF_ACCOUNT_ID || ''),
+      'process.env.CF_NAMESPACE_ID': JSON.stringify(env.CF_NAMESPACE_ID || ''),
+      'process.env.CF_API_TOKEN': JSON.stringify(env.CF_API_TOKEN || ''),
+      // Custom API Keys
       'process.env.CUSTOM_API_KEY_1': JSON.stringify(env.CUSTOM_API_KEY_1 || ''),
       'process.env.CUSTOM_API_KEY_2': JSON.stringify(env.CUSTOM_API_KEY_2 || ''),
       'process.env.CUSTOM_API_KEY_3': JSON.stringify(env.CUSTOM_API_KEY_3 || ''),
