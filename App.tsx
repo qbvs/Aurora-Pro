@@ -169,6 +169,33 @@ export const App: React.FC = () => {
   }, []);
 
   useEffect(() => { const t = setInterval(() => setClock(new Date()), 1000); return () => clearInterval(t); }, []);
+
+  // --- Dynamic Favicon & Title Effect ---
+  useEffect(() => {
+      // 1. Update Title
+      document.title = `${settings.appName} | 个人导航`;
+
+      // 2. Update Favicon
+      const updateFavicon = () => {
+          let link = document.querySelector("link[rel~='icon']") as HTMLLinkElement;
+          if (!link) {
+              link = document.createElement('link');
+              link.rel = 'icon';
+              document.head.appendChild(link);
+          }
+
+          if (settings.logoMode === 'image' && settings.customLogoUrl) {
+              link.href = settings.customLogoUrl;
+          } else {
+              // Convert PascalCase (e.g. Zap, LayoutGrid) to kebab-case (zap, layout-grid) for CDN mapping
+              const iconName = settings.appIcon || 'Zap';
+              const kebabIcon = iconName.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+              link.href = `https://unpkg.com/lucide-static@latest/icons/${kebabIcon}.svg`;
+          }
+      };
+      updateFavicon();
+  }, [settings.appName, settings.appIcon, settings.logoMode, settings.customLogoUrl]);
+
   useEffect(() => {
     const root = window.document.documentElement;
     if (settings.theme === 'dark' || (settings.theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
