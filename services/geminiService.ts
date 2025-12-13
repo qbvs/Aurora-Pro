@@ -70,13 +70,20 @@ const cleanJsonString = (text: string): string => {
 
 // --- Core Functionality ---
 
+const getThinkingConfig = (modelName: string) => {
+    if (modelName.includes('gemini-2.5') || modelName.includes('gemini-2.0')) {
+        return { thinkingConfig: { thinkingBudget: 0 } };
+    }
+    return undefined;
+};
+
 // Speed optimization: Use thinkingBudget: 0 for 2.5 models when latency matters
 const getModelConfig = (modelName: string) => {
-    // Only apply to gemini-2.5 models which support thinking config
-    if (modelName.includes('gemini-2.5') || modelName.includes('gemini-2.0')) {
-        return { thinkingConfig: { thinkingBudget: 0 }, responseMimeType: "application/json" };
-    }
-    return { responseMimeType: "application/json" };
+    const thinking = getThinkingConfig(modelName);
+    return { 
+        ...(thinking || {}),
+        responseMimeType: "application/json" 
+    };
 };
 
 export const analyzeUrl = async (url: string): Promise<AIResponse> => {
@@ -178,7 +185,7 @@ export const getAiGreeting = async (): Promise<string> => {
         const response = await ai.models.generateContent({ 
             model: config.model || 'gemini-2.5-flash', 
             contents: promptText,
-            config: { thinkingConfig: { thinkingBudget: 0 } }
+            config: getThinkingConfig(config.model || 'gemini-2.5-flash')
         });
         text = response.text?.trim() || "";
      } else {
@@ -211,7 +218,11 @@ export const suggestIcon = async (text: string): Promise<string> => {
   try {
     if (config.type === 'google') {
         const ai = new GoogleGenAI({ apiKey: config.apiKey });
-        const response = await ai.models.generateContent({ model: config.model, contents: promptText, config: { thinkingConfig: { thinkingBudget: 0 } } });
+        const response = await ai.models.generateContent({ 
+            model: config.model, 
+            contents: promptText, 
+            config: getThinkingConfig(config.model) 
+        });
         return response.text?.trim().split(/[\s"']+/)[0] || "Sparkles";
     }
     return "Sparkles";
@@ -237,5 +248,5 @@ export const testAiConnection = async (config: AIProviderConfig) => {
 };
 
 export const fetchAiModels = async (config: AIProviderConfig) => {
-    return ['gemini-2.5-flash', 'gemini-1.5-pro', 'gpt-4o'];
+    return ['gemini-2.5-flash', 'gemini-3-pro-preview', 'gpt-4o'];
 };

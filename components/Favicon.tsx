@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+
+import React, { useState, useEffect } from 'react';
 import { Globe } from 'lucide-react';
 import { cn } from '../utils';
 
@@ -6,9 +7,10 @@ interface FaviconProps {
   url: string;
   size?: number;
   className?: string;
+  onLoadError?: () => void;
 }
 
-export const Favicon: React.FC<FaviconProps> = ({ url, size = 32, className }) => {
+export const Favicon: React.FC<FaviconProps> = ({ url, size = 32, className, onLoadError }) => {
   const [imgError, setImgError] = useState(false);
 
   const getHostname = (link: string) => {
@@ -22,10 +24,20 @@ export const Favicon: React.FC<FaviconProps> = ({ url, size = 32, className }) =
   const hostname = getHostname(url);
   const letter = hostname ? hostname.charAt(0).toUpperCase() : '?';
 
-  // Sources to try. Google is often most reliable globally, Iowen is good for China.
-  // We use Google here as primary for stability, or could swap based on preference.
-  // Using Google's S2 service which is very fast.
+  // Google S2 is reliable. If it fails (network error), we treat it as a broken link signal if requested.
   const src = `https://www.google.com/s2/favicons?domain=${hostname}&sz=128`;
+
+  useEffect(() => {
+      // Reset error state when url changes
+      setImgError(false);
+  }, [url]);
+
+  const handleError = () => {
+      setImgError(true);
+      if (onLoadError) {
+          onLoadError();
+      }
+  };
 
   if (!hostname) {
     return (
@@ -39,11 +51,13 @@ export const Favicon: React.FC<FaviconProps> = ({ url, size = 32, className }) =
   }
 
   if (imgError) {
-    // Text Avatar Fallback
+    // If error occurs, we still render fallback for Edit Mode, 
+    // but Parent will likely hide this in View Mode via onLoadError.
     return (
         <div 
-            className={cn("rounded-lg flex items-center justify-center shrink-0 font-bold text-white bg-gradient-to-br from-violet-400 to-indigo-500 shadow-sm", className)}
+            className={cn("rounded-lg flex items-center justify-center shrink-0 font-bold text-white bg-gradient-to-br from-gray-300 to-gray-400 dark:from-slate-600 dark:to-slate-700 shadow-sm cursor-help", className)}
             style={{ width: size, height: size, fontSize: size * 0.5 }}
+            title="Logo unavailable"
         >
             {letter}
         </div>
@@ -56,7 +70,7 @@ export const Favicon: React.FC<FaviconProps> = ({ url, size = 32, className }) =
       alt={hostname}
       className={cn("bg-white rounded-lg object-contain shrink-0 shadow-sm", className)}
       style={{ width: size, height: size }}
-      onError={() => setImgError(true)}
+      onError={handleError}
       loading="lazy"
     />
   );
