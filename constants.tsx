@@ -1,4 +1,5 @@
 
+
 import { Category, AppSettings, SearchEngine, AIProviderConfig } from './types';
 
 export const INITIAL_SEARCH_ENGINES: SearchEngine[] = [
@@ -10,7 +11,7 @@ export const INITIAL_SEARCH_ENGINES: SearchEngine[] = [
   },
   {
     id: 'se-baidu',
-    name: 'Baidu',
+    name: '百度',
     baseUrl: 'https://www.baidu.com',
     searchUrlPattern: 'https://www.baidu.com/s?wd='
   },
@@ -25,10 +26,11 @@ export const INITIAL_SEARCH_ENGINES: SearchEngine[] = [
 const DEFAULT_AI_CONFIGS: AIProviderConfig[] = [
   {
     id: 'ai-google-env',
-    name: 'Google Gemini (Env)',
+    name: '谷歌 Gemini (环境变量)',
     type: 'google',
     baseUrl: '', // Not used for SDK
-    apiKey: '', // Will use process.env.API_KEY if empty
+    // Fix: Updated comment to reflect that for Google services, this will be ignored and process.env.API_KEY will always be used.
+    apiKey: '', // 对于谷歌服务，此项将被忽略，将始终使用 process.env.API_KEY
     model: 'gemini-2.5-flash',
     isActive: true
   },
@@ -56,7 +58,7 @@ export const INITIAL_SETTINGS: AppSettings = {
   backgroundBlur: 0,
   backgroundMaskOpacity: 0,
   enableAiGreeting: true,
-  footerHtml: '© 2024 Aurora Pro Navigation. Designed for Geeks.',
+  footerHtml: '© 2024 极光 Pro 导航. 为极客设计.',
   socialLinks: [
       { id: 'sl-1', platform: 'GitHub', url: 'https://github.com', icon: 'Github' },
       { id: 'sl-2', platform: 'Email', url: 'mailto:hello@example.com', icon: 'Mail' }

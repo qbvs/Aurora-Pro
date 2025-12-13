@@ -1,4 +1,5 @@
 
+
 import { GoogleGenAI } from "@google/genai";
 import { AIResponse, LinkItem, AIProviderConfig } from "../types";
 import { addLog } from "./logger";
@@ -8,7 +9,6 @@ import { getSettingsLocal } from "./storageService";
 
 const getEnvValue = (key?: string): string => {
     if (!key) return '';
-    // Directly map the keys defined in vite.config.ts
     switch (key) {
         case 'API_KEY': return process.env.API_KEY || '';
         case 'CUSTOM_API_KEY_1': return process.env.CUSTOM_API_KEY_1 || '';
@@ -20,34 +20,28 @@ const getEnvValue = (key?: string): string => {
     }
 };
 
+// Fix: Updated API key resolution to strictly follow @google/genai guidelines.
+// For Google services, it now exclusively uses `process.env.API_KEY`.
+// Manual input and other env slots are only for other provider types (e.g., 'openai').
 const resolveApiKey = (config: AIProviderConfig): string => {
-    // Priority 1: If manual API Key is entered and Env Slot is NOT selected (or "Manual" mode is active in UI logic), use it.
-    // However, the config object stores both. 
-    // Logic: If envSlot is present and valid, try to use it.
-    
+    if (config.type === 'google') {
+        return process.env.API_KEY || '';
+    }
+
+    // For other types like 'openai'
     if (config.envSlot) {
         const val = getEnvValue(config.envSlot);
         if (val) return val;
     }
-
-    // Priority 2: Manual Key
     if (config.apiKey && config.apiKey.trim() !== '') {
         return config.apiKey;
     }
-
-    // Priority 3: Fallback for Google type if nothing else set
-    if (config.type === 'google') {
-        return process.env.API_KEY || '';
-    }
-    
     return '';
 };
 
 const getActiveConfig = (): AIProviderConfig => {
     const settings = getSettingsLocal(); 
     const config = settings?.aiConfigs?.find(c => c.isActive) || settings?.aiConfigs?.[0];
-    
-    // Fallback default
     if (!config) {
         return { 
             id: 'default', 
@@ -59,20 +53,23 @@ const getActiveConfig = (): AIProviderConfig => {
             isActive: true 
         };
     }
-
     const resolvedKey = resolveApiKey(config);
     return { ...config, apiKey: resolvedKey };
 };
 
 const handleAiError = (error: any, context: string): Error => {
     const errorMessage = (error as any)?.message || String(error) || '未知错误';
-    addLog('error', `AI ${context} 失败: ${errorMessage}`);
+    addLog('error', `[${context}] 异常: ${errorMessage}`);
     return error instanceof Error ? error : new Error(String(errorMessage));
 };
 
-const normalizeBaseUrl = (url: string): string => {
-    if (!url) return '';
-    return url.trim().replace(/\/$/, '');
+const constructOpenAiEndpoint = (baseUrl: string): string => {
+    if (!baseUrl) return '';
+    let url = baseUrl.trim().replace(/\/$/, '');
+    
+    if (url.endsWith('/chat/completions')) return url;
+    
+    return `${url}/chat/completions`;
 };
 
 const cleanJsonString = (text: string): string => {
@@ -94,7 +91,7 @@ const cleanJsonString = (text: string): string => {
 // --- Core Functionality ---
 
 const getThinkingConfig = (modelName: string) => {
-    if (modelName.includes('gemini-2.5') || modelName.includes('gemini-2.0')) {
+    if (modelName.includes('gemini-2.5')) {
         return { thinkingConfig: { thinkingBudget: 0 } };
     }
     return undefined;
@@ -108,47 +105,69 @@ const getModelConfig = (modelName: string) => {
     };
 };
 
+const fetchOpenAI = async (config: AIProviderConfig, messages: any[], context: string) => {
+    const endpoint = constructOpenAiEndpoint(config.baseUrl);
+    addLog('info', `[${context}] POST ${endpoint} (模型: ${config.model})`);
+    
+    try {
+        const res = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json', 
+                'Authorization': `Bearer ${config.apiKey}` 
+            },
+            body: JSON.stringify({
+                model: config.model,
+                messages: messages,
+                temperature: 0.7 
+            })
+        });
+
+        if (!res.ok) {
+            const errText = await res.text();
+            let errMsg = `HTTP ${res.status}`;
+            
+            try {
+                const errJson = JSON.parse(errText);
+                if (errJson.error && errJson.error.message) {
+                    errMsg = `服务器拒绝: ${errJson.error.message}`;
+                } else {
+                    errMsg = `服务器错误 (${res.status}): ${errText.substring(0, 50)}`;
+                }
+            } catch {
+                errMsg = `HTTP ${res.status}: ${errText.substring(0, 100)}`;
+            }
+
+            addLog('error', `[${context}] ${errMsg}`);
+            throw new Error(errMsg);
+        }
+
+        const data = await res.json();
+        return data.choices?.[0]?.message?.content || '';
+    } catch (e: any) {
+        throw new Error(e.message); 
+    }
+};
+
 export const analyzeUrl = async (url: string): Promise<AIResponse> => {
   const config = getActiveConfig();
-  if (!config.apiKey) throw new Error("API Key 未配置 (Check Environment Variables)");
+  if (!config.apiKey) throw new Error("API Key 未配置");
 
-  // Updated Prompt for better Pros/Cons (4-8 chars)
-  const promptText = `Analyze this URL: "${url}".
-  Return a JSON object in Simplified Chinese.
-  Requirements:
-  1. "title": Concise name.
-  2. "description": 10-15 word summary.
-  3. "brandColor": Hex code.
-  4. "pros": A short phrase (4-8 chars) highlighting the best feature (e.g. "完全免费开源", "功能极其强大").
-  5. "cons": A short phrase (4-8 chars) highlighting a limitation (e.g. "国内访问较慢", "需注册使用").
-  
-  JSON Format:
-  { "title": "", "description": "", "brandColor": "#hex", "pros": "", "cons": "" }`;
+  const promptText = `分析网址: "${url}"。请返回简体中文的 JSON 对象。格式: { "title": "网站名称", "description": "10-15字的中文简介", "brandColor": "#十六进制颜色码", "pros": "4-8字的优点标签", "cons": "4-8字的缺点标签" }`;
 
   try {
     let rawText = '';
+    const modelName = config.model || 'gemini-2.5-flash';
     if (config.type === 'google') {
         const ai = new GoogleGenAI({ apiKey: config.apiKey });
         const response = await ai.models.generateContent({
-            model: config.model || 'gemini-2.5-flash',
+            model: modelName,
             contents: promptText,
-            config: getModelConfig(config.model)
+            config: getModelConfig(modelName)
         });
         rawText = response.text || '';
     } else {
-        // OpenAI compatible
-        const baseUrl = normalizeBaseUrl(config.baseUrl);
-        const endpoint = `${baseUrl}${baseUrl.endsWith('/v1') ? '' : '/v1'}/chat/completions`;
-        const res = await fetch(endpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${config.apiKey}` },
-            body: JSON.stringify({
-                model: config.model,
-                messages: [{ role: "user", content: promptText }]
-            })
-        });
-        const data = await res.json();
-        rawText = data.choices?.[0]?.message?.content || '';
+        rawText = await fetchOpenAI(config, [{ role: "user", content: promptText }], '网址分析');
     }
     
     return JSON.parse(cleanJsonString(rawText)) as AIResponse;
@@ -159,45 +178,28 @@ export const analyzeUrl = async (url: string): Promise<AIResponse> => {
 
 export const generateCategoryLinks = async (categoryTitle: string, count: number, existingUrls: string[] = []): Promise<Partial<LinkItem>[]> => {
   const config = getActiveConfig();
-  if (!config.apiKey) return [];
+  if (!config.apiKey) throw new Error("API Key 未配置");
   
-  // Updated Prompt for better Pros/Cons
-  const promptText = `List ${count} BEST, HIGH-QUALITY websites for the category "${categoryTitle}".
-  Output a JSON Array in Simplified Chinese.
-  Requirements:
-  1. "pros": Short phrase (4-8 chars) e.g. "拥有海量资源".
-  2. "cons": Short phrase (4-8 chars) e.g. "部分功能收费".
-  3. Exclude these URLs: ${existingUrls.slice(0, 10).join(',')}
-  
-  JSON Format:
-  [{ "title": "", "url": "https://...", "description": "", "color": "#hex", "pros": "", "cons": "" }]`;
+  const promptText = `为 "${categoryTitle}" 推荐 ${count} 个最优秀的网站。请返回简体中文的 JSON 数组。不要包含以下网址: ${existingUrls.slice(0, 10).join(',')}。格式: [{ "title": "", "url": "https://...", "description": "", "color": "#hex", "pros": "4-8字优点", "cons": "4-8字缺点" }]`;
 
   try {
     let rawText = '';
+    const modelName = config.model || 'gemini-2.5-flash';
     if (config.type === 'google') {
         const ai = new GoogleGenAI({ apiKey: config.apiKey });
         const response = await ai.models.generateContent({
-            model: config.model || 'gemini-2.5-flash',
+            model: modelName,
             contents: promptText,
-            config: getModelConfig(config.model)
+            config: getModelConfig(modelName)
         });
         rawText = response.text || '';
     } else {
-        const baseUrl = normalizeBaseUrl(config.baseUrl);
-        const endpoint = `${baseUrl}${baseUrl.endsWith('/v1') ? '' : '/v1'}/chat/completions`;
-        const res = await fetch(endpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${config.apiKey}` },
-            body: JSON.stringify({
-                model: config.model,
-                messages: [{ role: "user", content: promptText }]
-            })
-        });
-        const data = await res.json();
-        rawText = data.choices?.[0]?.message?.content || '';
+        rawText = await fetchOpenAI(config, [{ role: "user", content: promptText }], '链接生成');
     }
 
-    return JSON.parse(cleanJsonString(rawText));
+    const parsed = JSON.parse(cleanJsonString(rawText));
+    if (!Array.isArray(parsed)) throw new Error("AI 返回的不是列表格式，请重试。");
+    return parsed;
   } catch (error) {
      throw handleAiError(error, '内容生成');
   }
@@ -207,100 +209,88 @@ export const getAiGreeting = async (): Promise<string> => {
   const config = getActiveConfig();
   if (!config.apiKey) return "";
   
-  const promptText = `Generate ONE short, scenic, or philosophical sentence in Simplified Chinese.
-  Constraints:
-  1. STRICTLY SIMPLIFIED CHINESE ONLY. NO ENGLISH.
-  2. Max 15 characters.
-  3. No lists, no options.
-  4. Example: "星河滚烫，你是人间理想。"`;
+  const promptText = `请生成一句富有哲理和诗意的简体中文短语，适合用作个人导航页的每日寄语。内容可以源自中国古典文学、成语典故、名人名言或具有现代感的深刻洞察。请避免生成任何与'开发者'、'设计师'、'代码'或'编程'直接相关的、过于行业化或说教式的句子。目标是创造一种宁静、启发性或引人深思的氛围。语言必须优美、凝练。长度在20至60个字符之间。不要包含引号或作者名。`;
 
   try {
      let text = '';
+     const modelName = config.model || 'gemini-2.5-flash';
      if (config.type === 'google') {
         const ai = new GoogleGenAI({ apiKey: config.apiKey });
         const response = await ai.models.generateContent({ 
-            model: config.model || 'gemini-2.5-flash', 
+            model: modelName, 
             contents: promptText, 
-            config: getThinkingConfig(config.model || 'gemini-2.5-flash')
+            config: getThinkingConfig(modelName)
         });
         text = response.text?.trim() || "";
      } else {
-        const baseUrl = normalizeBaseUrl(config.baseUrl);
-        const endpoint = `${baseUrl}${baseUrl.endsWith('/v1') ? '' : '/v1'}/chat/completions`;
-        const res = await fetch(endpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${config.apiKey}` },
-            body: JSON.stringify({
-                model: config.model,
-                messages: [{ role: "user", content: promptText }]
-            })
-        });
-        const data = await res.json();
-        text = data.choices?.[0]?.message?.content?.trim() || "";
+        text = await fetchOpenAI(config, [{ role: "user", content: promptText }], '每日寄语');
      }
-     return text.replace(/[^\u4e00-\u9fa5，。？！]/g, '').trim(); 
+     return text.replace(/[^\u4e00-\u9fa5，。？！；：]/g, '').trim(); 
   } catch { return ""; }
 };
 
 export const suggestIcon = async (text: string): Promise<string> => {
   const config = getActiveConfig();
-  if (!config.apiKey) return "Folder"; // Default safe fallback
+  if (!config.apiKey) return "Folder"; 
   
-  const promptText = `Suggest the BEST SINGLE Lucide React icon name for "${text}".
-  Examples: "Video" -> "Play", "Code" -> "Code2", "Design" -> "Palette", "Game" -> "Gamepad2".
-  Output STRICTLY ONLY the icon string name. No quotes.`;
+  const promptText = `任务: 将输入 "${text}" 映射到最匹配的一个 Lucide React 图标。
+  规则:
+  1. 只返回图标的名称 (PascalCase格式)。
+  2. 必须是真实的图标名，不要创造。
+  3. 如果输入是 "Aurora", 建议返回 "Sparkles" 或 "Zap"。
+  4. 如果输入是中文 (例如 月亮)，先翻译成概念 (Moon)，再寻找图标。
+  5. 示例: "月亮"->"Moon", "游戏"->"Gamepad2", "设置"->"Settings"。`;
   
   try {
-    let iconName = 'Folder';
+    let rawText = '';
+    const modelName = config.model || 'gemini-2.5-flash';
     if (config.type === 'google') {
         const ai = new GoogleGenAI({ apiKey: config.apiKey });
         const response = await ai.models.generateContent({ 
-            model: config.model || 'gemini-2.5-flash', 
+            model: modelName, 
             contents: promptText, 
-            config: getThinkingConfig(config.model || 'gemini-2.5-flash') 
+            config: getThinkingConfig(modelName) 
         });
-        iconName = response.text?.trim().split(/[\s"']+/)[0] || "Folder";
+        rawText = response.text?.trim() || "Folder";
     } else {
-        const baseUrl = normalizeBaseUrl(config.baseUrl);
-        const endpoint = `${baseUrl}${baseUrl.endsWith('/v1') ? '' : '/v1'}/chat/completions`;
-        const res = await fetch(endpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${config.apiKey}` },
-            body: JSON.stringify({
-                model: config.model,
-                messages: [{ role: "user", content: promptText }]
-            })
-        });
-        const data = await res.json();
-        iconName = data.choices?.[0]?.message?.content?.trim().split(/[\s"']+/)[0] || "Folder";
+        rawText = await fetchOpenAI(config, [{ role: "user", content: promptText }], '图标推荐');
     }
-    return iconName;
+    
+    let cleanName = rawText.replace(/```/g, '').replace(/json/g, '').trim();
+    
+    const match = cleanName.match(/[a-zA-Z0-9]+/);
+    if (match) {
+        cleanName = match[0];
+        cleanName = cleanName.charAt(0).toUpperCase() + cleanName.slice(1);
+    } else {
+        return "Folder";
+    }
+
+    if (cleanName.length < 2) return "Folder";
+    return cleanName;
   } catch { return "Folder"; }
 };
 
 export const testAiConnection = async (config: AIProviderConfig) => {
     const key = resolveApiKey(config);
-    if (!key) return { success: false, message: 'API Key 未找到 (请检查环境变量配置)' };
+    if (!key) return { success: false, message: 'API Key 未找到' };
     
+    const testConfig = { ...config, apiKey: key };
+
     try {
+        const modelName = config.model || 'gemini-2.5-flash';
         if (config.type === 'google') {
              const ai = new GoogleGenAI({ apiKey: key });
-             await ai.models.generateContent({ model: config.model || 'gemini-2.5-flash', contents: 'Hi' });
+             await ai.models.generateContent({ model: modelName, contents: 'Hi' });
         } else {
-             const baseUrl = normalizeBaseUrl(config.baseUrl);
-             const endpoint = `${baseUrl}${baseUrl.endsWith('/v1') ? '' : '/v1'}/chat/completions`;
-             await fetch(endpoint, { 
-                 method: 'POST',
-                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
-                 body: JSON.stringify({ model: config.model, messages: [{role: 'user', content: 'hi'}] })
-             });
+             await fetchOpenAI(testConfig, [{role: 'user', content: 'hi'}], '连接测试');
         }
-        return { success: true, message: '连接成功 (Connected)' };
+        return { success: true, message: '连接成功' };
     } catch (e: any) {
-        return { success: false, message: '连接失败: ' + (e.message || 'Unknown Error') };
+        return { success: false, message: e.message || '连接失败' };
     }
 };
 
 export const fetchAiModels = async (config: AIProviderConfig) => {
-    return ['gemini-2.5-flash', 'gemini-3-pro-preview', 'gpt-4o'];
+    return ['gemini-2.5-flash', 'gemini-3-pro-preview', 'gpt-4o', 'gpt-3.5-turbo'];
 };

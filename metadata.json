@@ -1,5 +1,7 @@
 {
-  "name": "Aurora Pro Navigation",
-  "description": "A beautiful, AI-powered personal dashboard with Vercel KV sync support and day/night modes.",
-  "requestFramePermissions": []
+  "name": "极光 Pro 导航",
+  "description": "一个美观、由AI驱动的个人导航仪表盘，支持 Vercel KV 同步和日夜模式。",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
 }

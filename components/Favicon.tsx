@@ -57,7 +57,7 @@ export const Favicon: React.FC<FaviconProps> = ({ url, size = 32, className, onL
         <div 
             className={cn("rounded-lg flex items-center justify-center shrink-0 font-bold text-white bg-gradient-to-br from-gray-300 to-gray-400 dark:from-slate-600 dark:to-slate-700 shadow-sm cursor-help", className)}
             style={{ width: size, height: size, fontSize: size * 0.5 }}
-            title="Logo unavailable"
+            title="图标无法加载"
         >
             {letter}
         </div>
