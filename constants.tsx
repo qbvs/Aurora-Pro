@@ -1,5 +1,4 @@
 
-
 import { Category, AppSettings, SearchEngine, AIProviderConfig } from './types';
 
 export const INITIAL_SEARCH_ENGINES: SearchEngine[] = [
@@ -26,11 +25,10 @@ export const INITIAL_SEARCH_ENGINES: SearchEngine[] = [
 const DEFAULT_AI_CONFIGS: AIProviderConfig[] = [
   {
     id: 'ai-google-env',
-    name: '谷歌 Gemini (环境变量)',
+    name: '谷歌 Gemini (自动)',
     type: 'google',
-    baseUrl: '', // Not used for SDK
-    // Fix: Updated comment to reflect that for Google services, this will be ignored and process.env.API_KEY will always be used.
-    apiKey: '', // 对于谷歌服务，此项将被忽略，将始终使用 process.env.API_KEY
+    baseUrl: '', 
+    apiKey: '', // Always uses process.env.API_KEY
     model: 'gemini-2.5-flash',
     isActive: true
   },
@@ -39,8 +37,39 @@ const DEFAULT_AI_CONFIGS: AIProviderConfig[] = [
     name: '美团龙猫 (Longcat)',
     type: 'openai',
     baseUrl: 'https://api.longcat.chat/openai',
-    apiKey: '', // User needs to fill this
-    model: 'longcat-flash',
+    apiKey: '',
+    envSlot: 'CUSTOM_API_KEY_1',
+    model: 'LongCat-Flash-Thinking',
+    isActive: false
+  },
+  {
+    id: 'ai-mistral',
+    name: 'Mistral',
+    type: 'openai',
+    baseUrl: 'https://api.mistral.ai/v1',
+    apiKey: '',
+    envSlot: 'CUSTOM_API_KEY_2',
+    model: 'pixtral-12b-2409',
+    isActive: false
+  },
+  {
+    id: 'ai-aliyun',
+    name: '阿里云百炼',
+    type: 'openai',
+    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    apiKey: '',
+    envSlot: 'CUSTOM_API_KEY_3',
+    model: 'qwen-vl-plus',
+    isActive: false
+  },
+  {
+    id: 'ai-siliconflow',
+    name: '硅基流动 (DeepSeek)',
+    type: 'openai',
+    baseUrl: 'https://api.siliconflow.cn/v1',
+    apiKey: '',
+    envSlot: 'CUSTOM_API_KEY_4',
+    model: 'deepseek-ai/DeepSeek-R1',
     isActive: false
   }
 ];

@@ -1,5 +1,4 @@
 
-
 import { GoogleGenAI } from "@google/genai";
 import { AIResponse, LinkItem, AIProviderConfig } from "../types";
 import { addLog } from "./logger";
@@ -7,19 +6,19 @@ import { getSettingsLocal } from "./storageService";
 
 // --- Helpers ---
 
-// Updated to match Vite's recommended `VITE_` prefix for client-side env vars.
+// Updated helper to support CUSTOM_API_KEY_X format directly
 const getEnvValue = (key?: string): string => {
     if (!key) return '';
-    // This function now expects variables to be available under process.env
-    // The vite.config.ts ensures they are injected during build.
-    // For custom keys, we now look for VITE_CUSTOM_API_KEY_*
+    // Fix: Removed dynamic process.env[key] access which causes ReferenceError in browser
+    
+    // Explicitly check known keys that Vite defines
     switch (key) {
         case 'API_KEY': return process.env.API_KEY || '';
-        case 'VITE_CUSTOM_API_KEY_1': return process.env.VITE_CUSTOM_API_KEY_1 || '';
-        case 'VITE_CUSTOM_API_KEY_2': return process.env.VITE_CUSTOM_API_KEY_2 || '';
-        case 'VITE_CUSTOM_API_KEY_3': return process.env.VITE_CUSTOM_API_KEY_3 || '';
-        case 'VITE_CUSTOM_API_KEY_4': return process.env.VITE_CUSTOM_API_KEY_4 || '';
-        case 'VITE_CUSTOM_API_KEY_5': return process.env.VITE_CUSTOM_API_KEY_5 || '';
+        case 'CUSTOM_API_KEY_1': return process.env.CUSTOM_API_KEY_1 || process.env.VITE_CUSTOM_API_KEY_1 || '';
+        case 'CUSTOM_API_KEY_2': return process.env.CUSTOM_API_KEY_2 || process.env.VITE_CUSTOM_API_KEY_2 || '';
+        case 'CUSTOM_API_KEY_3': return process.env.CUSTOM_API_KEY_3 || process.env.VITE_CUSTOM_API_KEY_3 || '';
+        case 'CUSTOM_API_KEY_4': return process.env.CUSTOM_API_KEY_4 || process.env.VITE_CUSTOM_API_KEY_4 || '';
+        case 'CUSTOM_API_KEY_5': return process.env.CUSTOM_API_KEY_5 || process.env.VITE_CUSTOM_API_KEY_5 || '';
         default: return '';
     }
 };
@@ -71,9 +70,13 @@ const constructOpenAiEndpoint = (baseUrl: string): string => {
     if (!baseUrl) return '';
     let url = baseUrl.trim().replace(/\/$/, '');
     
-    if (url.endsWith('/chat/completions')) return url;
-    
-    return `${url}/chat/completions`;
+    // Some providers like Aliyun need strict path adherence, others need /chat/completions
+    // If user provided a full path including v1, respect it mostly.
+    // Simple heuristic: if it doesn't end in chat/completions, append it.
+    if (!url.endsWith('/chat/completions')) {
+        return `${url}/chat/completions`;
+    }
+    return url;
 };
 
 const cleanJsonString = (text: string): string => {
@@ -247,7 +250,7 @@ export const askSimpleQuestion = async (question: string): Promise<string> => {
         const ai = new GoogleGenAI({ apiKey: config.apiKey });
         const response = await ai.models.generateContent({ 
             model: modelName, 
-            contents: promptText,
+            contents: promptText, 
             config: getThinkingConfig(modelName)
         });
         text = response.text?.trim() || "AI 思考超时";

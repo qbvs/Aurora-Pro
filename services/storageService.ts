@@ -6,53 +6,52 @@ const DATA_KEY = 'aurora_data_v1';
 const SETTINGS_KEY = 'aurora_settings_v1';
 const ENGINES_KEY = 'aurora_engines_v1';
 
-// Helper to check if any KV is configured
-export const isKVConfigured = (): boolean => {
-  const isVercel = !!(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
-  const isCloudflare = !!(process.env.CF_ACCOUNT_ID && process.env.CF_NAMESPACE_ID && process.env.CF_API_TOKEN);
-  return isVercel || isCloudflare;
+// Internal helper to check if Vercel KV env vars are present
+const isVercelKVConfigured = () => {
+  return !!(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
 };
 
-// --- Cloud Sync Helpers (Vercel KV & Cloudflare KV REST API) ---
-
-const kvFetch = async (command: string, key: string, value?: any) => {
-  const isVercel = !!(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
-  const isCloudflare = !!(process.env.CF_ACCOUNT_ID && process.env.CF_NAMESPACE_ID && process.env.CF_API_TOKEN);
-
-  if (!isVercel && !isCloudflare) return null;
-
-  try {
-    if (isCloudflare) {
-      // --- Cloudflare KV REST API Logic ---
-      const { CF_ACCOUNT_ID, CF_NAMESPACE_ID, CF_API_TOKEN } = process.env;
-      const baseUrl = `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/storage/kv/namespaces/${CF_NAMESPACE_ID}`;
-      const headers = { Authorization: `Bearer ${CF_API_TOKEN}` };
-
-      if (command.toUpperCase() === 'GET') {
-        const response = await fetch(`${baseUrl}/values/${key}`, { headers });
-        if (!response.ok) {
-          if (response.status === 404) return null; // Key not found is not an error
-          throw new Error(`Cloudflare GET Error (${response.status}): ${await response.text()}`);
+// New function to actively test the connection to the cloud KV store.
+export const verifyCloudConnection = async (): Promise<boolean> => {
+    if (isVercelKVConfigured()) {
+        try {
+            const baseUrl = process.env.KV_REST_API_URL?.replace(/\/$/, '');
+            const url = `${baseUrl}/get/aurora-connection-test-key`;
+            const token = process.env.KV_REST_API_TOKEN;
+            const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+            // Any non-server-error response (like 404 Not Found or 401 Unauthorized)
+            // means the service itself is configured and reachable.
+            return response.status < 500;
+        } catch {
+            return false;
         }
-        return response.json(); // CF returns the value directly
-      } else if (command.toUpperCase() === 'SET') {
-        const response = await fetch(`${baseUrl}/values/${key}`, {
-            method: 'PUT',
-            headers: { ...headers, 'Content-Type': 'application/json' },
-            body: JSON.stringify(value)
-        });
-        if (!response.ok) throw new Error(`Cloudflare SET Error (${response.status}): ${await response.text()}`);
-        const result = await response.json();
-        return result.success ? value : null;
-      }
+    } else {
+        // For Cloudflare, we must check if the function endpoint exists and is not misconfigured.
+        try {
+            const response = await fetch(`/api/storage?key=aurora-connection-test-key`);
+            // response.ok is true for statuses 200-299.
+            // A 404 means the function doesn't exist.
+            // A 500 means it exists but the KV binding is broken.
+            // Both will result in response.ok being false.
+            return response.ok;
+        } catch {
+            // This catches network errors if the fetch itself fails.
+            return false;
+        }
+    }
+};
 
-    } else if (isVercel) {
-      // --- Vercel KV REST API Logic (Existing) ---
+
+// --- Universal Sync Helper ---
+const kvFetch = async (command: 'GET' | 'SET', key: string, value?: any) => {
+  try {
+    // Strategy 1: Vercel KV
+    if (isVercelKVConfigured()) {
       const baseUrl = process.env.KV_REST_API_URL?.replace(/\/$/, '');
       const url = `${baseUrl}/`;
       const token = process.env.KV_REST_API_TOKEN;
 
-      const body = value !== undefined 
+      const body = command === 'SET' 
         ? JSON.stringify([command, key, JSON.stringify(value)])
         : JSON.stringify([command, key]);
 
@@ -62,7 +61,7 @@ const kvFetch = async (command: string, key: string, value?: any) => {
         body: body,
       });
 
-      if (!response.ok) throw new Error(`Vercel KV Error (${response.status}): ${await response.text()}`);
+      if (!response.ok) throw new Error(`Vercel KV Error (${response.status})`);
       
       const result = await response.json();
       if (result.error) throw new Error(`Vercel KV Command Error: ${result.error}`);
@@ -74,12 +73,30 @@ const kvFetch = async (command: string, key: string, value?: any) => {
            return result.result;
          }
       }
+      return null;
+    } 
+    // Strategy 2: Cloudflare KV via Functions
+    else {
+      const apiUrl = `/api/storage?key=${key}`;
+      if (command === 'GET') {
+        const response = await fetch(apiUrl);
+        if (!response.ok) return null;
+        return await response.json();
+      } 
+      else if (command === 'SET') {
+        const response = await fetch(apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ value })
+        });
+        if (!response.ok) throw new Error('Cloudflare KV Write Failed');
+        return value;
+      }
     }
-    return null;
   } catch (error) {
     const msg = (error as any)?.message || String(error);
-    addLog('error', `KV Sync Exception: ${msg.substring(0, 150)}`);
-    return null;
+    addLog('warn', `Cloud Sync API call failed: ${msg}`);
+    return null; // Fail silently for individual operations
   }
 };
 
@@ -103,7 +120,7 @@ const getFromLocal = <T>(key: string): T | null => {
 
 export const saveCategories = async (categories: Category[]) => {
   saveToLocal(DATA_KEY, categories);
-  if (isKVConfigured()) kvFetch('SET', DATA_KEY, categories);
+  kvFetch('SET', DATA_KEY, categories);
 };
 
 export const loadCategories = async (): Promise<Category[] | null> => {
@@ -111,7 +128,6 @@ export const loadCategories = async (): Promise<Category[] | null> => {
 };
 
 export const syncCategoriesFromCloud = async (): Promise<Category[] | null> => {
-  if (!isKVConfigured()) return null;
   const cloudData = await kvFetch('GET', DATA_KEY);
   if (cloudData && Array.isArray(cloudData)) {
       saveToLocal(DATA_KEY, cloudData);
@@ -124,7 +140,7 @@ export const syncCategoriesFromCloud = async (): Promise<Category[] | null> => {
 
 export const saveSettings = async (settings: AppSettings) => {
   saveToLocal(SETTINGS_KEY, settings);
-  if (isKVConfigured()) kvFetch('SET', SETTINGS_KEY, settings);
+  kvFetch('SET', SETTINGS_KEY, settings);
 };
 
 export const getSettingsLocal = (): AppSettings | null => {
@@ -136,7 +152,6 @@ export const loadSettings = async (): Promise<AppSettings | null> => {
 };
 
 export const syncSettingsFromCloud = async (): Promise<AppSettings | null> => {
-    if (!isKVConfigured()) return null;
     const cloudData = await kvFetch('GET', SETTINGS_KEY);
     if (cloudData) {
         saveToLocal(SETTINGS_KEY, cloudData);
@@ -149,7 +164,7 @@ export const syncSettingsFromCloud = async (): Promise<AppSettings | null> => {
 
 export const saveSearchEngines = async (engines: SearchEngine[]) => {
   saveToLocal(ENGINES_KEY, engines);
-  if (isKVConfigured()) kvFetch('SET', ENGINES_KEY, engines);
+  kvFetch('SET', ENGINES_KEY, engines);
 };
 
 export const loadSearchEngines = async (): Promise<SearchEngine[] | null> => {
@@ -157,7 +172,6 @@ export const loadSearchEngines = async (): Promise<SearchEngine[] | null> => {
 };
 
 export const syncSearchEnginesFromCloud = async (): Promise<SearchEngine[] | null> => {
-    if (!isKVConfigured()) return null;
     const cloudData = await kvFetch('GET', ENGINES_KEY);
     if (cloudData && Array.isArray(cloudData)) {
         saveToLocal(ENGINES_KEY, cloudData);

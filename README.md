@@ -1,209 +1,188 @@
+# Aurora Pro 导航 - AI 驱动的个人仪表盘
 
-<div align="center">
+![Aurora Pro 主界面截图](https://i.imgur.com/k2j1q5F.png)
 
-# 🌌 Aurora Pro &middot; 极光导航
+**Aurora Pro** 是一款美观、强大且高度可定制的个人导航仪表盘。它由 AI 驱动，能够智能分析链接、推荐内容，并提供每日灵感寄语。
 
-**一款专为极客打造的新一代 AI 个人导航仪表盘**
-<br>
-*融合设计美学、智能算法与极致的个性化体验*
+## ✨ 功能亮点
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FMar-ct%2FAurora-pro&env=API_KEY,ADMIN_PASSWORD,VITE_CUSTOM_API_KEY_1&envDescription=Google%20Gemini%20API%20Key%20and%20Admin%20Password&envLink=https://aistudio.google.com/app/apikey)
-[![Deploy to Cloudflare](https://static.cloudflare.com/pages/dev-badge.png)](https://deploy.cloudflare.com/?url=https://github.com/Mar-ct/Aurora-pro)
-<br>
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)
-![React](https://img.shields.io/badge/React-18-blue)
-![Vercel KV](https://img.shields.io/badge/Vercel-KV_Sync-black)
-![Cloudflare KV](https://img.shields.io/badge/Cloudflare-KV_Sync-orange)
+-   **🤖 AI 强力驱动**:
+    -   **每日 AI 寄语**: 每天访问时，由 AI 生成一句富有哲理的诗意短语。
+    -   **智能链接分析**: 自动填充网站标题、描述、品牌色。
+    -   **内容发现**: 批量推荐相关网站。
+    -   **智能图标**: 自动匹配 Lucide 图标。
 
-</div>
+-   **🎨 高度可定制**: 日夜主题、极光背景、自定义 Logo。
 
-<br/>
-
-> **Aurora Pro** 将您的浏览器起始页，从一个简单的链接集合，转变为一个**会思考**、**懂习惯**的个人数字中枢。它不仅看起来赏心悦目，更能通过 AI 和算法自动优化您的使用效率。
+-   **☁️ 全平台云同步**:
+    -   **Vercel KV**: 适用于 Vercel 部署或 Cloudflare 混合部署。
+    -   **Cloudflare KV**: 适用于 Cloudflare 原生部署 (免费且快速)。
 
 ---
 
-## ✨ 核心亮点 (Core Features)
+## 🛠️ 部署第一步：准备工作 (所有方案通用)
 
-### 🧠 1. 智能常用推荐 (Smart Favorites)
-告别手动整理！系统内置智能追踪算法：
-- **自动学习**: 系统会自动记录您对每个网站的点击使用频率。
-- **动态晋升**: 全站使用频率最高的 **8 个网站** 会自动晋升至首页顶部的「🔥 常用推荐」分类。
-- **实时更新**: 随着您使用习惯的变化，推荐列表会自动调整，确保您最需要的工具永远触手可及。
+在开始之前，请确保你完成了以下两项准备。别担心，我们一步步来。
 
-### 🤖 2. 深度 AI 集成 (Powered by Gemini)
-- **精准网站识别**: 只需粘贴一个 URL，AI 即可自动提取网站标题、生成**精准的中文简介**、提取品牌主色调，并智能生成**优缺点标签**（例如“永久免费”、“需注册”）。
-- **智能分类填充**: 新建一个分类（如“设计灵感”），AI 可一键为您搜索并填充该领域最高质量的真实网站资源。
-- **每日灵感寄语**: 拒绝生硬的翻译腔！经过调优的 AI 模型每天为您生成一句**纯中文**的开发者/设计师专属励志短语。
-- **智能配置助手 (NEW!)**:
-    - **搜索引擎**: 粘贴搜索引擎主页 URL，AI 自动识别并填充名称和搜索格式。
-    - **社交链接**: 粘贴 GitHub/Twitter 等链接，AI 自动识别平台名称和对应图标。
-    - **应用图标**: 根据您设置的应用名称，AI 可一键推荐最匹配的 Lucide 图标。
+### 1. 拥有一个 GitHub 账号
+所有部署都基于 GitHub。如果你还没有，请先 [注册一个 GitHub 账号](https://github.com/join)。
 
-### 🎨 3. 极致美学与个性化
-- **极光流体背景**: 默认启用优雅的动态背景，同时支持**纯净单色**或**自定义壁纸**（支持上传或 URL）。
-- **多样化 Logo 设置**: 可选用 **Lucide 图标**、**上传本地图片**或直接**粘贴图片 URL** 作为站点 Logo。
-- **灵活的社交链接**: 不仅支持普通超链接，还新增 **QR 二维码**模式，完美适配微信等需要扫码的场景。
-- **沉浸式体验**: 精心调教的毛玻璃效果、平滑的过渡动画以及完美的深色模式（Dark Mode）适配。
+### 2. Fork (复制) 本项目到你的仓库
+这是关键一步，相当于把项目的代码复制一份到你自己的名下，这样部署平台才能读取它。
 
-### ☁️ 4. 企业级云同步
-- **多端无缝漫游**: 同时支持 **Vercel KV** 和 **Cloudflare KV** 数据库，您的所有配置、链接和点击数据均在云端加密存储。
-- **即时同步**: 在公司电脑添加的链接，回家打开手机立刻就能看到，无需手动导入导出。
+1.  登录你的 GitHub 账号。
+2.  访问本项目页面。
+3.  点击页面右上角的 **"Fork"** 按钮。
+4.  在弹出的页面中，直接点击 **"Create fork"** 按钮。
+5.  等待几秒钟，页面会自动跳转到你自己的仓库，URL 会变成 `https://github.com/你的用户名/aurora-pro`。**恭喜你，代码准备好了！**
+
+### 3. 获取 Gemini API Key (AI 功能核心)
+本项目的所有 AI 功能都由 Google Gemini 提供支持，你需要一个免费的 API Key。
+
+1.  访问 [Google AI Studio](https://aistudio.google.com/app/apikey)。
+2.  使用你的 Google 账号登录。
+3.  点击 **"Create API key"** 按钮。
+4.  在弹出的窗口中，复制那串以 `AIza` 开头的字符。这就是你的 API Key。
+5.  **请务必将这串 Key 保存到安全的地方**，比如记事本里，我们马上会用到它。
 
 ---
 
-## 🚀 部署指南 (保姆级教程)
+## 🚀 部署第二步：选择你的部署平台
 
-我们提供两种全球顶级的免费部署方案，**无需任何编程基础**。请任选其一。
+我们提供三种方案，请根据你的偏好选择**其中一种**即可。
 
-### 📦 准备工作 (Prerequisites)
-在开始之前，请确保您已准备好：
-1.  一个 **GitHub** 账号。
-2.  一个 **Google Gemini API Key** ([点此免费获取](https://aistudio.google.com/app/apikey))。
-
----
-
-### 方案一：通过 Vercel 部署 (最简单, 推荐新手)
-
-这是最快、最简单的部署方式，全程可视化操作。
-
-#### 第 1 步：一键克隆与部署
-- 点击项目顶部的蓝色 **`Deploy with Vercel`** 按钮。
-- Vercel 会引导您登录 GitHub 并创建一个新项目。为您的项目起一个名称 (e.g., `my-aurora-nav`)，然后点击 **`Create`**。
-
-#### 第 2 步：配置环境变量
-- 在接下来的页面中，Vercel 会提示您配置环境变量。这是**关键步骤**。
-- **注意**: 为了安全，所有需要暴露给前端的自定义环境变量（例如备用 API Keys）都必须以 `VITE_` 作为前缀，这是构建工具的要求。
-
-| 变量名 (Variable name) | 变量值 (Value) | 描述 |
-| :--- | :--- | :--- |
-| `API_KEY` | `您的 Google Gemini API 密钥` | **(必填)** 用于驱动 AI 功能。 |
-| `ADMIN_PASSWORD` | `您自定义的管理后台密码` | **(必填)** 用于登录后台，请设置一个强密码。 |
-| `VITE_CUSTOM_API_KEY_1` | (可选) 备用 Key 1 | (可选) 备用 API Key 槽位，可在后台切换。 |
-| `VITE_CUSTOM_API_KEY_2` | (可选) 备用 Key 2 | (可选) ... |
-
-- 填写完毕后，点击 **`Deploy`**。请耐心等待 1-2 分钟，Vercel 正在为您构建应用。
-
-#### 第 3 步：连接云数据库 (Vercel KV)
-部署成功后，我们需要为应用连接一个免费的云数据库，用于同步您的所有设置。
-1.  在 Vercel 项目的控制台页面，点击顶部的 **`Storage`** 选项卡。
-2.  在 **`KV (built with Upstash)`** 选项下，点击 **`Connect Store`**。
-3.  保持默认选项，选择一个离您最近的区域 (Region)，然后点击 **`Connect`**。
-4.  连接成功后，Vercel 会自动在您的项目中添加 `KV_REST_API_URL` 和 `KV_REST_API_TOKEN` 两个环境变量。
-
-> **💡 提示:** 这一步是让您的导航站拥有“记忆”的关键。
-
-#### 第 4 步：重新部署以应用数据库设置
-为了让应用读取到刚刚添加的数据库变量，我们需要最后再部署一次。
-1.  返回项目主控制台，点击顶部的 **`Deployments`** 选项卡。
-2.  找到最新的那条部署记录 (通常在最顶部)，点击右侧的 **`...`** (更多) 按钮。
-3.  在下拉菜单中选择 **`Redeploy`** 并确认。
-
-**✅ 部署完成！** 访问您的 Vercel 域名 (`.vercel.app`) 即可开始使用。进入后台后，侧边栏底部应显示 **🟢 已连接云同步**。
+-   **方案 A: Vercel 完整部署 (⭐️ 强烈推荐新手)**: 部署和数据库都在 Vercel，一站式解决，配置最简单。
+-   **方案 B: Cloudflare 原生部署**: 网站和数据库都在 Cloudflare，全球访问速度快，免费额度高。
+-   **方案 C: Cloudflare + Vercel 混合部署**: 网站在 Cloudflare，数据库在 Vercel。适合希望利用 CF 网络，又想简化数据库配置的用户。
 
 ---
 
-### 方案二：通过 Cloudflare Pages 部署 (性能优越)
+### 方案 A: Vercel 完整部署 (最简单)
 
-Cloudflare 在全球拥有顶级的网络性能，尤其在国内访问速度更快，但配置步骤稍多。
+#### 第 1 步: 导入项目到 Vercel
+1.  访问 [Vercel 官网](https://vercel.com) 并用你的 GitHub 账号登录。
+2.  登录后，你会看到 Vercel 的仪表盘 (Dashboard)。点击页面中间或右上角的 **"Add New..."** -> **"Project"**。
+3.  在项目列表里，找到你刚刚 Fork 的 `aurora-pro` 项目，点击它右侧的 **"Import"** 按钮。
 
-#### 第 1 步：Fork 本项目到您的 GitHub
-- 点击本项目 GitHub 页面右上角的 **`Fork`** 按钮，将项目完整地复制一份到您自己的 GitHub 账号下。
+#### 第 2 步: 配置项目
+1.  **项目名称 (Project Name)**: 可以保持默认，或者改成你喜欢的名字。
+2.  **环境变量 (Environment Variables)**: 这是最重要的一步。找到这个区域，我们需要添加两个变量：
+    -   **添加第一个变量**:
+        -   在 `Name` (或 `Key`) 处输入 `API_KEY`。
+        -   在 `Value` 处粘贴你之前保存的 **Google Gemini API Key**。
+        -   点击 **"Add"**。
+    -   **添加第二个变量**:
+        -   在 `Name` 处输入 `ADMIN_PASSWORD`。
+        -   在 `Value` 处输入一个**你自己设定的后台登录密码**，例如 `123456`。请记住这个密码。
+        -   点击 **"Add"**。
+3.  **开始部署**: 确认以上信息无误后，点击底部的 **"Deploy"** 按钮。等待 1-2 分钟，Vercel 会自动完成构建和部署。
 
-#### 第 2 步：创建 Cloudflare KV 存储空间
-1.  登录 Cloudflare 控制台，进入左侧菜单的 **`Workers & Pages`** -> **`KV`**。
-2.  点击 **`Create a namespace`**，输入一个 **纯英文** 的名称 (e.g., `AURORA_KV`)，然后点击创建。
-3.  **✅ 立即复制并保存 `Namespace ID`**：点击刚创建的 `AURORA_KV`，在详情页中找到并复制 **Namespace ID** (一长串字符)，我们稍后会用到。
+#### 第 3 步: 创建并连接数据库
+部署成功后，你会看到一个庆祝页面。但我们还需要最后一步来开启数据同步功能。
 
-#### 第 3 步：创建 Cloudflare API Token
-1.  在 Cloudflare 控制台，点击右上角您的头像 -> **`My Profile`** -> 左侧菜单 **`API Tokens`**。
-2.  点击 **`Create Token`**，然后找到 **"Edit Cloudflare Workers"** 模板并点击 **`Use template`**。
-3.  **权限配置 (Permissions)**:
-    - **`Account`** -> **`Workers KV Storage`** -> 确保权限是 **`Edit`**。
-4.  **账户资源 (Account Resources)**:
-    - 保持默认的 `Include` -> `All accounts` 即可。
-5.  点击 **`Continue to summary`** -> **`Create Token`**。
-6.  **✅ 立即复制并保存生成的 Token**，这个 Token **只会显示一次**，请妥善保管。
+1.  点击庆祝页面上的 **"Continue to Dashboard"** 进入项目管理后台。
+2.  在项目页面的顶部导航栏，找到并点击 **"Storage"**。
+3.  在打开的页面中，选择 **"KV (Redis)"** 选项卡，然后点击 **"Create Database"**。
+4.  选择一个离你最近的地区 (Region)，然后点击 **"Create"**。
+5.  Vercel 会展示连接成功的界面，并自动帮你把数据库信息添加到了环境变量里。
 
-#### 第 4 步：部署到 Cloudflare Pages
-1.  回到 **`Workers & Pages`**，点击 **`Create application`** -> **`Pages`** -> **`Connect to Git`**。
-2.  选择您在第一步 Fork 的仓库并授权。
-3.  在 **`Set up builds and deployments`** 页面：
-    - **Framework preset**: 应该会自动识别为 **`Vite`**，如未识别请手动选择。
-    - **Build command**: `npm run build`
-    - **Build output directory**: `dist`
-4.  **关键：配置环境变量 (Environment variables)**
-    - 展开 **`Environment variables (advanced)`**，点击 **`Add variable`** 添加以下 **5 个** 变量：
+#### 第 4 步: 重新部署使数据库生效
+这是**必须操作**的一步，为了让网站能读取到刚刚创建的数据库信息。
 
-    | 变量名 (Variable name) | 变量值 (Value) | 来源 |
-    | :--- | :--- | :--- |
-    | `API_KEY` | `您的 Google Gemini API 密钥` | 准备工作中获取 |
-    | `ADMIN_PASSWORD` | `您自定义的管理后台密码` | 自行设定 |
-    | `CF_ACCOUNT_ID` | `您的 Cloudflare 账户 ID` | Cloudflare 首页右侧可找到 |
-    | `CF_NAMESPACE_ID` | `您在第2步复制的 Namespace ID` | 第 2 步获取 |
-    | `CF_API_TOKEN` | `您在第3步生成的 API Token` | 第 3 步获取 |
-    | `VITE_CUSTOM_API_KEY_1`| (可选) 备用 Key 1 | (可选) ... |
-
-    > **🔒 安全提示**: 请务必点击每个变量右侧的小锁图标 (Encrypt) 来加密您的敏感信息。
-
-5.  点击 **`Save and Deploy`**。Cloudflare 会自动开始构建和部署。
-
-**✅ 部署完成！** Cloudflare 不需要重新部署即可让环境变量生效。访问您的 `.pages.dev` 域名，后台应显示已连接数据库。
+1.  回到项目的主概览页面 (Overview) 或 **"Deployments"** 页面。
+2.  找到最新的一次部署记录 (通常在列表最上方)，点击它右侧的 "..." 更多菜单。
+3.  选择 **"Redeploy"**，然后在弹窗中再次点击 **"Redeploy"**。
+4.  等待部署完成。现在，你的个人导航站已经完美运行在 Vercel 上，并支持数据云同步！
 
 ---
 
-## ⚙️ 高级配置 (环境变量)
+### 方案 B: Cloudflare 原生部署 (速度最快)
 
-| 变量名 | 平台 | 描述 |
-| :--- | :--- | :--- |
-| `API_KEY` | Vercel & CF | **(必填)** 默认的 Google Gemini API Key。 |
-| `ADMIN_PASSWORD` | Vercel & CF | **(必填)** 管理后台登录密码。 |
-| `KV_REST_API_URL` | Vercel | (自动) 连接 Vercel KV 后自动生成，**请勿手动修改**。 |
-| `KV_REST_API_TOKEN`| Vercel | (自动) 连接 Vercel KV 后自动生成，**请勿手动修改**。 |
-| `CF_ACCOUNT_ID` | Cloudflare | **(必填)** 您的 Cloudflare 账户 ID。 |
-| `CF_NAMESPACE_ID` | Cloudflare | **(必填)** 您的 KV Namespace ID。 |
-| `CF_API_TOKEN` | Cloudflare | **(必填)** 您生成的 API Token。 |
-| `VITE_CUSTOM_API_KEY_1`~`5` | Vercel & CF | (可选) 备用槽位。**必须以 `VITE_` 开头** 才能被前端代码识别。 |
+#### 第 1 步: 在 Cloudflare 创建 KV 数据库
+在部署网站前，我们先创建好用于存储数据的“仓库”。
 
----
+1.  登录 [Cloudflare Dashboard](https://dash.cloudflare.com/)。
+2.  在左侧菜单栏中，找到并点击 **"Workers & Pages"**。
+3.  在二级菜单中，点击 **"KV"**。
+4.  点击页面右侧蓝色的 **"Create a Namespace"** 按钮。
+5.  在 **"Namespace name"** 输入框中，**必须准确输入 `AURORA_KV`** (这是代码里约定好的名字)。
+6.  点击 **"Add"**。KV 数据库就创建好了。
 
-## 🛠️ 本地开发 (Developers)
+#### 第 2 步: 创建 Pages 项目并部署
+1.  回到 **"Workers & Pages"** 的概览 (Overview) 页面。
+2.  点击 **"Create Application"** -> 选择 **"Pages"** 选项卡 -> 点击 **"Connect to Git"**。
+3.  授权并选择你 Fork 的 `aurora-pro` 仓库。
+4.  在 **"Set up builds and deployments"** 页面：
+    -   **Project name**: 可以自定义。
+    -   **Production branch**: 保持 `main`。
+    -   **Framework preset**: 在下拉框中选择 `Vite`。Cloudflare 会自动填充下面的构建设置。
+    -   **Build command**: 应该是 `npm run build`。
+    -   **Build output directory**: 应该是 `dist`。
+5.  展开 **"Environment variables (advanced)"**，添加两个变量：
+    -   **添加第一个**: `Variable name` 填 `API_KEY`，`Value` 粘贴你的 **Gemini API Key**。
+    -   **添加第二个**: `Variable name` 填 `ADMIN_PASSWORD`，`Value` 填你**自定义的后台密码**。
+6.  点击 **"Save and Deploy"**。等待部署完成。
 
-```bash
-# 1. 克隆项目
-git clone https://github.com/your-repo/aurora-pro.git
-cd aurora-pro
+#### 第 3 步: 绑定 KV 数据库到 Pages 项目
+网站部署好了，现在要把它们“连接”起来。
 
-# 2. 安装依赖
-npm install
+1.  在项目部署成功的页面，点击 **"Continue to project"**。
+2.  在项目管理页面，点击顶部的 **"Settings"** -> 左侧的 **"Functions"**。
+3.  向下滚动页面，找到 **"KV namespace bindings"** 部分，点击 **"Add binding"**。
+4.  **Variable name**: **必须准确输入 `AURORA_KV`**。
+5.  **KV namespace**: 在下拉框中，选择我们第 1 步创建的那个 KV 数据库。
+6.  点击 **"Save"**。
 
-# 3. 配置环境
-# 在根目录新建 .env 文件，填入：
-# API_KEY=your_gemini_key
-# ADMIN_PASSWORD=your_password
-# VITE_CUSTOM_API_KEY_1=your_other_key
-# 注：本地开发无需配置 KV，数据将存储在 LocalStorage 中。
-
-# 4. 启动
-npm run dev
-```
-
----
-
-## 💡 常见问题 (FAQ)
-
-**Q: 为什么“常用推荐”分类无法手动添加链接？**
-A: “常用推荐”分类是由系统算法全自动管理的。它根据您的点击行为，实时筛选出全站点击率最高的 8 个链接。您只需正常使用导航站，爱用的网站会自动出现在这里。
-
-**Q: 如何添加微信二维码？**
-A: 在“基础设置” -> “社交链接”部分，填写基本信息后，点击 **"+ 添加二维码"** 按钮，即可选择上传本地二维码图片或粘贴图片 URL。在前台，点击对应的社交图标就会弹出二维码供扫描。
-
-**Q: 只有 Google Gemini 能用吗？**
-A: 默认使用 Gemini。但我们在“AI 服务”面板中提供了 **OpenAI 格式** 的接口支持。您可以添加任何兼容 OpenAI 协议的 API（如 DeepSeek, Moonshot, Groq, OneAPI 等），只需填入对应的 Base URL、API Key 和模型名称即可。
+#### 第 4 步: 重新部署使绑定生效
+1.  回到项目顶部的 **"Deployments"** 页面。
+2.  找到最新的一次部署，点击 **"Retry deployment"**。
+3.  等待部署完成。现在，你的网站已在 Cloudflare 上运行，并使用 Cloudflare KV 进行数据同步。
 
 ---
 
-<div align="center">
-Made with ❤️ for efficiency and beauty.
-</div>
+### 方案 C: Cloudflare + Vercel 混合部署 (灵活方案)
+
+#### 第 1 步: 在 Vercel 创建数据库并获取凭证
+我们只需要 Vercel 的数据库，所以过程很简单。
+
+1.  登录 Vercel，按照 **方案 A 的第 1 步和第 3 步** 操作，创建一个项目并为其创建一个 KV 数据库。
+2.  进入这个 Vercel 项目的 **"Settings"** -> **"Environment Variables"**。
+3.  在这里，你会看到 Vercel 自动创建的 `KV_REST_API_URL` 和 `KV_REST_API_TOKEN`。**分别复制这两个变量的值**，保存到记事本里。
+
+#### 第 2 步: 在 Cloudflare 创建 Pages 项目
+1.  按照 **方案 B 的第 2 步** 在 Cloudflare 上创建 Pages 项目。
+2.  **关键区别在于环境变量**：在 Cloudflare 的环境变量设置中，你需要添加 **四个** 变量：
+    -   `API_KEY`: 你的 Gemini Key。
+    -   `ADMIN_PASSWORD`: 你的后台密码。
+    -   `KV_REST_API_URL`: 从 Vercel 复制的 URL 值。
+    -   `KV_REST_API_TOKEN`: 从 Vercel 复制的 Token 值。
+3.  点击 **"Save and Deploy"**。
+4.  等待部署完成即可。这个方案**不需要**在 Cloudflare 上创建或绑定 KV，也**不需要**重新部署。
+
+---
+
+## 🎉 部署完成！开始使用
+
+无论你选择哪种方案，部署成功后：
+
+1.  访问你的导航站网址。
+2.  点击右上角的 **设置 `⚙️` 图标**。
+3.  输入你设置的 `ADMIN_PASSWORD` 即可进入后台，开始自由定制你的专属导航！
+
+## 💻 本地开发
+
+给喜欢折腾的朋友：
+
+1.  Clone 代码并安装依赖 (`pnpm install` 或 `npm install`)。
+2.  创建 `.env.local` 文件:
+    ```env
+    API_KEY="AIza..."
+    ADMIN_PASSWORD="123"
+    # 如果想测试 Vercel 同步，请填入 Vercel 的 KV 变量
+    ```
+3.  启动: `npm run dev`。
+    *(注: 本地开发默认只支持 Vercel KV 同步或 LocalStorage。Cloudflare KV 需要使用 `npx wrangler pages dev dist` 模拟环境)*
+
+## 📄 许可证
+
+本项目采用 [MIT](LICENSE) 许可证。

@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect } from 'react';
 import { 
   Settings, Plus, Search, Moon, Sun, LayoutGrid, 
@@ -17,7 +15,7 @@ import { addLog, subscribeLogs, getLogs, clearLogs, initLogger } from './service
 import { INITIAL_DATA, INITIAL_SETTINGS, INITIAL_SEARCH_ENGINES } from './constants';
 import { 
   loadCategories, saveCategories, loadSettings, saveSettings, 
-  loadSearchEngines, saveSearchEngines, isKVConfigured,
+  loadSearchEngines, saveSearchEngines, verifyCloudConnection,
   syncCategoriesFromCloud, syncSettingsFromCloud, syncSearchEnginesFromCloud
 } from './services/storageService';
 import { analyzeUrl, generateCategoryLinks, getAiGreeting, suggestIcon, testAiConnection, askSimpleQuestion } from './services/geminiService';
@@ -74,7 +72,7 @@ const ToastContainer: React.FC<{ toasts: ToastMsg[]; remove: (id: number) => voi
             <div key={t.id} className={cn("pointer-events-auto min-w-[300px] p-4 rounded-2xl shadow-lg border backdrop-blur-xl animate-fade-in flex items-center gap-3", 
                 t.type === 'error' ? "bg-red-950/80 border-red-500/30 text-red-200" : 
                 t.type === 'success' ? "bg-emerald-950/80 border-emerald-500/30 text-emerald-200" :
-                "bg-slate-900/80 border-slate-700/50 text-slate-200"
+                "bg-white/80 dark:bg-slate-900/80 border-slate-200 dark:border-slate-700/50 text-slate-800 dark:text-slate-200"
             )}>
                 {t.type === 'error' ? <AlertCircle size={20} className="text-red-400"/> : t.type === 'success' ? <CircleCheck size={20} className="text-emerald-400"/> : <Activity size={20} className="text-blue-400"/>}
                 <span className="text-sm font-medium flex-1">{t.msg}</span>
@@ -87,6 +85,7 @@ const ToastContainer: React.FC<{ toasts: ToastMsg[]; remove: (id: number) => voi
 // --- Main App Component ---
 
 type SidebarTab = 'dashboard' | 'general' | 'ai' | 'appearance' | 'search' | 'diagnose';
+type CloudSyncStatus = 'checking' | 'connected' | 'disconnected';
 
 export const App: React.FC = () => {
   // -- Data State --
@@ -102,10 +101,13 @@ export const App: React.FC = () => {
   const [showLoginModal, setShowLoginModal] = useState(false);
   
   // -- New UI State --
+  const [cloudSyncStatus, setCloudSyncStatus] = useState<CloudSyncStatus>('checking');
   const [brokenLinks, setBrokenLinks] = useState<Set<string>>(new Set());
   const [showQrModal, setShowQrModal] = useState<string | null>(null);
   const [toasts, setToasts] = useState<ToastMsg[]>([]);
   const [viewCategory, setViewCategory] = useState<string | null>(null); // Controls Focus Mode
+  const [clickedLinkId, setClickedLinkId] = useState<string | null>(null); // For click animation
+  const [isDark, setIsDark] = useState(true); // Internal state for easier rendering logic
 
   // -- Inputs --
   const [searchTerm, setSearchTerm] = useState('');
@@ -136,6 +138,11 @@ export const App: React.FC = () => {
   // Social Form
   const [socialForm, setSocialForm] = useState<Partial<SocialLink>>({});
   const [showSocialQrInput, setShowSocialQrInput] = useState(false);
+
+  // Add Category State
+  const [showAddCatModal, setShowAddCatModal] = useState(false);
+  const [newCatName, setNewCatName] = useState('');
+  const [isCreatingCat, setIsCreatingCat] = useState(false);
 
   // AI Config Forms
   const [editingAiConfig, setEditingAiConfig] = useState<AIProviderConfig | null>(null);
@@ -187,6 +194,7 @@ export const App: React.FC = () => {
   useEffect(() => {
     initLogger();
     const init = async () => {
+      // Step 1: Load local data first for a fast initial render
       try {
           const [localCats, localSets, localEngines] = await Promise.all([loadCategories(), loadSettings(), loadSearchEngines()]);
           if (localCats) setCategories(updateCommonRecommendations(localCats));
@@ -197,18 +205,28 @@ export const App: React.FC = () => {
           addLog('info', '本地数据加载完成');
       } catch (e) { console.error(e); }
 
-      if (isKVConfigured()) {
-          try {
-              const [c, s, e] = await Promise.all([syncCategoriesFromCloud(), syncSettingsFromCloud(), syncSearchEnginesFromCloud()]);
-              if (c) { setCategories(updateCommonRecommendations(c)); addLog('info', '云端同步成功'); }
-              if (s) setLocalSettings(p => ({...p, ...s, socialLinks: s.socialLinks || p.socialLinks}));
-              if (e && Array.isArray(e) && e.length > 0) setSearchEngines(e);
-          } catch (err) { console.error(err); }
+      // Step 2: Verify cloud connection and sync if available
+      const isConnected = await verifyCloudConnection();
+      if (isConnected) {
+        setCloudSyncStatus('connected');
+        addLog('info', '云同步服务已连接');
+        try {
+          const [c, s, e] = await Promise.all([syncCategoriesFromCloud(), syncSettingsFromCloud(), syncSearchEnginesFromCloud()]);
+          if (c) { setCategories(updateCommonRecommendations(c)); addLog('info', '云端同步成功'); }
+          if (s) setLocalSettings(p => ({...p, ...s, socialLinks: s.socialLinks || p.socialLinks}));
+          if (e && Array.isArray(e) && e.length > 0) setSearchEngines(e);
+        } catch (err) {
+            addLog('error', `云同步获取数据失败: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      } else {
+        setCloudSyncStatus('disconnected');
+        addLog('warn', '未配置或无法连接云同步服务');
       }
     };
     init();
-    setDateInfo(getFormattedDate());
     
+    // Step 3: Fetch non-critical dynamic data
+    setDateInfo(getFormattedDate());
     const fetchWeatherData = () => {
         if (!navigator.geolocation) {
             setWeatherInfo('error');
@@ -241,7 +259,6 @@ export const App: React.FC = () => {
             }
         );
     };
-
     fetchWeatherData();
   }, []);
 
@@ -267,13 +284,38 @@ export const App: React.FC = () => {
       updateFavicon();
   }, [settings.appName, settings.appIcon, settings.logoMode, settings.customLogoUrl]);
 
+  // -- Theme Logic --
   useEffect(() => {
     const root = window.document.documentElement;
-    if (settings.backgroundMode === 'aurora' || settings.theme === 'dark' || (settings.theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) root.classList.add('dark');
-    else root.classList.remove('dark');
-  }, [settings.theme, settings.backgroundMode]);
+    const isSystemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const shouldBeDark = settings.theme === 'dark' || (settings.theme === 'system' && isSystemDark);
+    
+    if (shouldBeDark) {
+        root.classList.add('dark');
+        setIsDark(true);
+    } else {
+        root.classList.remove('dark');
+        setIsDark(false);
+    }
+  }, [settings.theme]);
 
-  useEffect(() => { if (editingAiConfig) { setAiKeySource(editingAiConfig.envSlot ? 'env' : 'manual'); setTestStatus({ status: 'idle' }); } }, [editingAiConfig]);
+  const toggleTheme = () => {
+      // FIX: The toggle logic should be based on the current visual state (isDark),
+      // not the settings.theme, to correctly override 'system' preference.
+      const newTheme: AppSettings['theme'] = isDark ? 'light' : 'dark';
+      const n = { ...settings, theme: newTheme };
+      setLocalSettings(n);
+      saveSettings(n);
+      addToast('info', `切换到${newTheme === 'dark' ? '深色' : '浅色'}模式`);
+  };
+
+  // Fix: Only update source type when the modal *opens* (new ID), not on every edit to `editingAiConfig`
+  useEffect(() => { 
+    if (editingAiConfig) { 
+        setAiKeySource(editingAiConfig.envSlot ? 'env' : 'manual'); 
+        setTestStatus({ status: 'idle' }); 
+    } 
+  }, [editingAiConfig?.id]);
 
   useEffect(() => {
       if (!settings.enableAiGreeting) return;
@@ -297,6 +339,13 @@ export const App: React.FC = () => {
   };
   
   const handleLinkClick = async (category: Category, link: LinkItem) => {
+      setClickedLinkId(link.id); // Trigger animation
+      
+      // Delay opening slightly to show animation if desired, or open immediately.
+      // Since window.open might be blocked if not direct, we usually do it immediately.
+      // But for visual feedback, the animation runs concurrently.
+      setTimeout(() => setClickedLinkId(null), 350); // Reset after animation duration
+
       window.open(link.url, settings.openInNewTab ? '_blank' : '_self');
       const newCats = categories.map(cat => {
           if (cat.id === COMMON_REC_ID) return cat;
@@ -356,6 +405,32 @@ export const App: React.FC = () => {
           addToast('error', 'AI 推荐图标失败');
       } finally {
           setIsIconSuggesting(false);
+      }
+  };
+
+  const handleCreateCategory = async () => {
+      if (!newCatName.trim()) return;
+      setIsCreatingCat(true);
+      try {
+          // Attempt to get an icon from AI, fallback to 'Folder' handled by service or catch
+          const iconName = await suggestIcon(newCatName);
+          const newCat: Category = {
+              id: `cat-${Date.now()}`,
+              title: newCatName,
+              icon: iconName,
+              links: []
+          };
+          handleSaveData([...categories, newCat]);
+          setShowAddCatModal(false);
+          setNewCatName('');
+          addToast('success', `分类 "${newCatName}" 创建成功`);
+      } catch (e) {
+          // Fallback if AI fails completely
+          handleSaveData([...categories, { id: `cat-${Date.now()}`, title: newCatName, icon: 'Folder', links: [] }]);
+          setShowAddCatModal(false);
+          setNewCatName('');
+      } finally {
+          setIsCreatingCat(false);
       }
   };
 
@@ -513,9 +588,25 @@ export const App: React.FC = () => {
               ))}
           </nav>
           <div className="p-4 border-t border-slate-800 space-y-4">
-              <div className={cn("px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2", isKVConfigured() ? "bg-emerald-950/50 text-emerald-400 border border-emerald-500/20" : "bg-red-950/50 text-red-400 border border-red-500/20")}>
-                  <div className={cn("w-2 h-2 rounded-full", isKVConfigured() ? "bg-emerald-500" : "bg-red-500")}/>
-                  {isKVConfigured() ? "已连接云同步" : "未连接数据库"}
+              <div className={cn(
+                  "px-4 py-2 rounded-full text-xs font-bold flex items-center justify-center gap-2 transition-all",
+                  cloudSyncStatus === 'connected' ? "bg-teal-500/10 text-teal-300 border border-teal-500/20" :
+                  cloudSyncStatus === 'disconnected' ? "bg-red-500/10 text-red-400 border border-red-500/20" :
+                  "bg-slate-800 text-slate-400 border border-slate-700"
+              )}>
+                  <div className={cn(
+                      "w-2 h-2 rounded-full",
+                      cloudSyncStatus === 'connected' ? "bg-teal-400" :
+                      cloudSyncStatus === 'disconnected' ? "bg-red-500" :
+                      "bg-slate-500"
+                  )}/>
+                  <span>
+                      {
+                          cloudSyncStatus === 'connected' ? "已连接云同步" :
+                          cloudSyncStatus === 'disconnected' ? "未连接数据库" :
+                          "检查连接中..."
+                      }
+                  </span>
               </div>
               <button onClick={() => { setIsAuthenticated(false); localStorage.removeItem('aurora_auth'); setIsEditMode(false); }} className="w-full flex items-center gap-2 text-red-400 hover:text-red-300 px-4 py-2 text-sm font-bold"><LogOut size={16}/> 退出登录</button>
           </div>
@@ -558,7 +649,7 @@ export const App: React.FC = () => {
                   </div>
               </div>
           ))}
-          <button onClick={() => handleSaveData([...categories, { id: `cat-${Date.now()}`, title: '新分类', icon: 'Folder', links: [] }])} className="w-full py-4 border-2 border-dashed border-slate-700 rounded-2xl text-slate-500 font-bold hover:border-cyan-500 hover:text-cyan-400 transition-all flex items-center justify-center gap-2"><Plus size={20}/> 添加新分类</button>
+          <button onClick={() => setShowAddCatModal(true)} className="w-full py-4 border-2 border-dashed border-slate-700 rounded-2xl text-slate-500 font-bold hover:border-cyan-500 hover:text-cyan-400 transition-all flex items-center justify-center gap-2"><Plus size={20}/> 添加新分类</button>
       </div>
   );
 
@@ -738,26 +829,39 @@ export const App: React.FC = () => {
         ? categories.filter(c => c.id === viewCategory)
         : categories;
 
+    // Enhanced Aurora Gradients for both Light and Dark modes
     const deepAuroraGradient = settings.backgroundMode === 'aurora' ? (
-        <div className="fixed inset-0 overflow-hidden -z-20 pointer-events-none select-none bg-[#020617]">
-            <div className="absolute top-[-20%] left-[-10%] w-[60vw] h-[60vw] bg-indigo-900/20 rounded-full blur-[120px] animate-float opacity-60"/>
-            <div className="absolute top-[10%] right-[-20%] w-[50vw] h-[50vw] bg-purple-900/20 rounded-full blur-[120px] animate-float opacity-50" style={{ animationDelay: '2s' }}/>
-            <div className="absolute bottom-[-10%] left-[20%] w-[70vw] h-[70vw] bg-cyan-900/10 rounded-full blur-[150px] animate-float opacity-40" style={{ animationDelay: '4s' }}/>
-            <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")` }}></div>
+        <div className="fixed inset-0 overflow-hidden -z-20 pointer-events-none select-none transition-colors duration-1000 ease-in-out bg-slate-50 dark:bg-[#020617]">
+            {/* Dark Mode Orbs */}
+            <div className="hidden dark:block">
+                <div className="absolute top-[-20%] left-[-10%] w-[60vw] h-[60vw] bg-indigo-900/30 rounded-full blur-[120px] animate-float opacity-60"/>
+                <div className="absolute top-[10%] right-[-20%] w-[50vw] h-[50vw] bg-purple-900/20 rounded-full blur-[120px] animate-float opacity-50" style={{ animationDelay: '2s' }}/>
+                <div className="absolute bottom-[-10%] left-[20%] w-[70vw] h-[70vw] bg-cyan-900/10 rounded-full blur-[150px] animate-float opacity-40" style={{ animationDelay: '4s' }}/>
+            </div>
+            
+            {/* Light Mode Orbs (Softer, Pastel) */}
+            <div className="block dark:hidden">
+                <div className="absolute top-[-20%] left-[-10%] w-[70vw] h-[70vw] bg-blue-100/80 rounded-full blur-[100px] animate-float opacity-60"/>
+                <div className="absolute top-[10%] right-[-20%] w-[60vw] h-[60vw] bg-purple-100/60 rounded-full blur-[100px] animate-float opacity-50" style={{ animationDelay: '2s' }}/>
+                <div className="absolute bottom-[-10%] left-[10%] w-[80vw] h-[80vw] bg-cyan-100/60 rounded-full blur-[120px] animate-float opacity-40" style={{ animationDelay: '4s' }}/>
+            </div>
+
+            <div className="absolute inset-0 opacity-[0.03] dark:opacity-[0.03]" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")` }}></div>
         </div>
     ) : null;
 
     return (
-      <div className={cn("min-h-screen font-sans transition-colors duration-500 ease-out selection:bg-cyan-500/30 text-slate-100", 
-          settings.backgroundMode === 'monotone' ? "bg-slate-950" : "bg-transparent")}>
+      <div className={cn("min-h-screen font-sans transition-colors duration-500 ease-out selection:bg-cyan-500/30 text-slate-900 dark:text-slate-100", 
+          settings.backgroundMode === 'monotone' ? "bg-slate-50 dark:bg-slate-950" : "bg-transparent")}>
           
           {settings.backgroundMode === 'custom' && settings.customBackgroundImage && (
               <div className="fixed inset-0 bg-cover bg-center -z-20 transition-opacity duration-700" style={{ backgroundImage: `url(${settings.customBackgroundImage})` }} />
           )}
           {deepAuroraGradient}
-          <div className="fixed inset-0 bg-slate-950/20 -z-10 backdrop-blur-[1px]" />
+          {/* Main Backdrop: Lighter for Light Mode, Darker for Dark Mode */}
+          <div className="fixed inset-0 bg-white/30 dark:bg-slate-950/20 -z-10 backdrop-blur-[1px]" />
 
-          <header className="fixed top-0 left-0 right-0 z-40 px-6 lg:px-12 py-5 flex items-center justify-between bg-slate-950/60 backdrop-blur-xl border-b border-white/5 shadow-sm transition-all duration-300">
+          <header className="fixed top-0 left-0 right-0 z-40 px-6 lg:px-12 py-5 flex items-center justify-between bg-white/70 dark:bg-slate-950/60 backdrop-blur-xl border-b border-slate-200/50 dark:border-white/5 shadow-sm transition-all duration-300">
              <div className="flex items-center gap-6">
                  <div className="hidden md:flex items-center gap-3">
                      {settings.logoMode === 'icon' ? (
@@ -768,18 +872,18 @@ export const App: React.FC = () => {
                          settings.customLogoUrl && <img src={settings.customLogoUrl} className="w-10 h-10 rounded-2xl object-contain bg-white/10 shadow-sm"/>
                      )}
                      <div className="flex flex-col">
-                         <h1 className="text-sm font-bold tracking-tight text-white">{settings.appName}</h1>
-                         <p className="text-[10px] text-slate-400 font-medium tracking-wide uppercase flex items-center gap-1">
-                             <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse shadow-[0_0_10px_rgba(34,211,238,0.5)]"/> 
+                         <h1 className="text-sm font-bold tracking-tight text-slate-900 dark:text-white">{settings.appName}</h1>
+                         <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium tracking-wide uppercase flex items-center gap-1">
+                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 dark:bg-cyan-400 animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.5)] dark:shadow-[0_0_10px_rgba(34,211,238,0.5)]"/> 
                              在线
                          </p>
                      </div>
                  </div>
-                 <button className="md:hidden p-2 text-slate-400"><Menu size={20}/></button>
+                 <button className="md:hidden p-2 text-slate-600 dark:text-slate-400"><Menu size={20}/></button>
              </div>
 
              <div className="flex-1 max-w-xl mx-4 relative group">
-                 <div className="absolute inset-y-0 left-4 flex items-center gap-3 pointer-events-none text-slate-500 group-focus-within:text-cyan-400 transition-colors">
+                 <div className="absolute inset-y-0 left-4 flex items-center gap-3 pointer-events-none text-slate-400 dark:text-slate-500 group-focus-within:text-cyan-600 dark:group-focus-within:text-cyan-400 transition-colors">
                      <Search size={18}/>
                  </div>
                  <input 
@@ -787,31 +891,36 @@ export const App: React.FC = () => {
                     value={searchTerm} 
                     onChange={(e) => setSearchTerm(e.target.value)} 
                     onKeyDown={(e) => { if (e.key === 'Enter' && searchTerm.trim()) window.open(activeEngine.searchUrlPattern + encodeURIComponent(searchTerm), settings.openInNewTab ? '_blank' : '_self'); }} 
-                    className="w-full h-11 pl-12 pr-4 rounded-2xl bg-white/5 border border-white/5 focus:bg-slate-900/80 focus:border-cyan-500/50 shadow-inner focus:shadow-lg focus:shadow-cyan-500/10 outline-none text-sm font-medium transition-all text-slate-200 placeholder:text-slate-500 backdrop-blur-md" 
+                    className="w-full h-11 pl-12 pr-4 rounded-2xl bg-slate-100/50 dark:bg-white/5 border border-slate-200/50 dark:border-white/5 focus:bg-white dark:focus:bg-slate-900/80 focus:border-cyan-500/30 dark:focus:border-cyan-500/50 shadow-inner focus:shadow-lg focus:shadow-cyan-500/10 outline-none text-sm font-medium transition-all text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500 backdrop-blur-md" 
                     placeholder={`使用 ${activeEngine?.name} 搜索...`}
                  />
                  <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 pr-1">
                     {(searchEngines || []).slice(0, 3).map(engine => (
-                        <button key={engine.id} onClick={() => { const n = {...settings, activeSearchEngineId: engine.id}; setLocalSettings(n); saveSettings(n); }} className={cn("p-1.5 rounded-lg transition-all", settings.activeSearchEngineId === engine.id ? "bg-cyan-500/20 shadow text-cyan-300 opacity-100 scale-110 border border-cyan-500/30" : "opacity-40 hover:opacity-80 hover:bg-white/10 text-slate-400")}>
+                        <button key={engine.id} onClick={() => { const n = {...settings, activeSearchEngineId: engine.id}; setLocalSettings(n); saveSettings(n); }} className={cn("p-1.5 rounded-lg transition-all", settings.activeSearchEngineId === engine.id ? "bg-white dark:bg-cyan-500/20 shadow-sm text-cyan-600 dark:text-cyan-300 opacity-100 scale-110 border border-slate-200 dark:border-cyan-500/30" : "opacity-40 hover:opacity-80 hover:bg-white/50 dark:hover:bg-white/10 text-slate-400")}>
                             <Favicon url={engine.baseUrl} size={14} className="rounded-full grayscale hover:grayscale-0 transition-all"/>
                         </button>
                     ))}
                  </div>
              </div>
 
-             <div className="flex items-center gap-3">
-                 <button onClick={() => isAuthenticated ? setIsEditMode(true) : setShowLoginModal(true)} className="p-2.5 rounded-xl text-slate-400 hover:bg-white/10 hover:text-white transition-all border border-transparent hover:border-white/5"><Settings size={20}/></button>
+             <div className="flex items-center gap-2">
+                 <button onClick={toggleTheme} className="p-2.5 rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-amber-500 dark:hover:text-yellow-300 transition-all border border-transparent hover:border-slate-200 dark:hover:border-white/5">
+                     {isDark ? <Sun size={20}/> : <Moon size={20}/>}
+                 </button>
+                 <button onClick={() => isAuthenticated ? setIsEditMode(true) : setShowLoginModal(true)} className="p-2.5 rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white transition-all border border-transparent hover:border-slate-200 dark:hover:border-white/5">
+                     <Settings size={20}/>
+                 </button>
              </div>
           </header>
 
           <div className="pt-28 px-4 lg:px-12 max-w-[1600px] mx-auto flex gap-12 h-screen">
               <aside className="hidden lg:flex w-64 shrink-0 flex-col pb-10 sticky top-28 h-[calc(100vh-140px)]">
-                  <div className="mb-8 p-6 rounded-3xl bg-white/5 backdrop-blur-md border border-white/5 shadow-lg relative overflow-hidden group">
-                      <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 to-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                  <div className="mb-8 p-6 rounded-3xl bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/5 shadow-xl dark:shadow-lg relative overflow-hidden group">
+                      <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/5 to-purple-500/5 dark:from-cyan-500/10 dark:to-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
                       <div className="relative z-10 flex flex-col items-center justify-center text-center">
                         {/* Time Display */}
                         <div className="flex items-baseline">
-                          <div className="text-5xl font-bold text-white tracking-tight">
+                          <div className="text-5xl font-bold text-slate-800 dark:text-white tracking-tight">
                             {String(clock.getHours()).padStart(2, '0')}:{String(clock.getMinutes()).padStart(2, '0')}
                           </div>
                           <div className="ml-2 text-2xl font-medium text-slate-400">
@@ -820,12 +929,12 @@ export const App: React.FC = () => {
                         </div>
 
                         {/* Greeting Text */}
-                        <div className="mt-4 text-lg font-medium text-cyan-400">
+                        <div className="mt-4 text-lg font-medium text-cyan-600 dark:text-cyan-400">
                           {greetingTime}好
                         </div>
 
                         {/* Date and Weather Info */}
-                        <div className="mt-2 flex items-center gap-3 text-sm text-slate-400">
+                        <div className="mt-2 flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
                             <span>{dateInfo}</span>
                             {weatherInfo && <>
                                 <span className="opacity-50">•</span>
@@ -835,7 +944,7 @@ export const App: React.FC = () => {
                                             return <><LoadingSpinner /> <span className="text-xs">加载天气...</span></>;
                                         }
                                         if (weatherInfo === 'error') {
-                                            return <><AlertCircle size={16} className="text-amber-400"/> <span className="text-xs">获取失败</span></>;
+                                            return <><AlertCircle size={16} className="text-amber-500 dark:text-amber-400"/> <span className="text-xs">获取失败</span></>;
                                         }
                                         if (typeof weatherInfo === 'object') {
                                             return <><Icon name={weatherInfo.icon} size={16} /> <span>{weatherInfo.text}</span></>;
@@ -851,18 +960,26 @@ export const App: React.FC = () => {
                   <nav className="flex-1 space-y-1 overflow-y-auto custom-scrollbar pr-2">
                       <button 
                           onClick={() => setViewCategory(null)} 
-                          className={cn("w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all text-sm font-bold group relative overflow-hidden", !viewCategory ? "bg-white/10 text-cyan-400 shadow-md shadow-cyan-900/20 backdrop-blur-md border border-white/5" : "text-slate-400 hover:bg-white/5 hover:text-white")}
+                          className={cn("w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all text-sm font-bold group relative overflow-hidden", 
+                              !viewCategory 
+                                ? "bg-white dark:bg-white/10 text-cyan-600 dark:text-cyan-400 shadow-md shadow-cyan-900/5 dark:shadow-cyan-900/20 backdrop-blur-md border border-slate-100 dark:border-white/5" 
+                                : "text-slate-500 dark:text-slate-400 hover:bg-white/50 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white"
+                          )}
                       >
-                          <div className={cn("transition-transform group-hover:scale-110 duration-200", !viewCategory ? "text-cyan-400" : "text-slate-500")}><Home size={20}/></div>
+                          <div className={cn("transition-transform group-hover:scale-110 duration-200", !viewCategory ? "text-cyan-600 dark:text-cyan-400" : "text-slate-400 dark:text-slate-500")}><Home size={20}/></div>
                           <span>总览</span>
-                          {!viewCategory && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.8)]"/>}
+                          {!viewCategory && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-cyan-500 dark:bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.8)]"/>}
                       </button>
 
-                      <div className="my-4 h-px bg-gradient-to-r from-transparent via-slate-800 to-transparent opacity-50"/>
+                      <div className="my-4 h-px bg-gradient-to-r from-transparent via-slate-200 dark:via-slate-800 to-transparent opacity-50"/>
 
                       {(categories || []).map(cat => (
-                          <button key={cat.id} onClick={() => setViewCategory(cat.id)} className={cn("w-full flex items-center gap-4 px-5 py-3.5 rounded-2xl transition-all text-sm font-medium group relative", viewCategory === cat.id ? "bg-white/10 text-cyan-400 shadow-md backdrop-blur-md border border-white/5" : "text-slate-400 hover:bg-white/5 hover:text-white")}>
-                              <div className={cn("transition-transform group-hover:scale-110 duration-200", viewCategory === cat.id ? "text-cyan-400" : cat.id === COMMON_REC_ID ? "text-orange-400" : "text-slate-500")}><Icon name={cat.icon} size={18}/></div>
+                          <button key={cat.id} onClick={() => setViewCategory(cat.id)} className={cn("w-full flex items-center gap-4 px-5 py-3.5 rounded-2xl transition-all text-sm font-medium group relative", 
+                              viewCategory === cat.id 
+                                ? "bg-white dark:bg-white/10 text-cyan-600 dark:text-cyan-400 shadow-md backdrop-blur-md border border-slate-100 dark:border-white/5" 
+                                : "text-slate-500 dark:text-slate-400 hover:bg-white/50 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white"
+                          )}>
+                              <div className={cn("transition-transform group-hover:scale-110 duration-200", viewCategory === cat.id ? "text-cyan-600 dark:text-cyan-400" : cat.id === COMMON_REC_ID ? "text-orange-500 dark:text-orange-400" : "text-slate-400 dark:text-slate-500")}><Icon name={cat.icon} size={18}/></div>
                               <span>{cat.title}</span>
                           </button>
                       ))}
@@ -870,7 +987,7 @@ export const App: React.FC = () => {
                   
                   <div className="mt-auto pt-6 flex gap-3 flex-wrap">
                       {(settings.socialLinks || []).map(link => (
-                         <a key={link.id} href={link.qrCode ? undefined : link.url} onClick={(e) => { if(link.qrCode) { e.preventDefault(); setShowQrModal(link.qrCode); }}} target={link.qrCode ? undefined : "_blank"} className="p-3 rounded-2xl bg-white/5 border border-white/5 text-slate-400 hover:text-cyan-400 hover:bg-white/10 hover:shadow-lg hover:shadow-cyan-900/20 hover:-translate-y-1 transition-all duration-300" title={link.platform}><Icon name={link.icon} size={18}/></a>
+                         <a key={link.id} href={link.qrCode ? undefined : link.url} onClick={(e) => { if(link.qrCode) { e.preventDefault(); setShowQrModal(link.qrCode); }}} target={link.qrCode ? undefined : "_blank"} className="p-3 rounded-2xl bg-white/40 dark:bg-white/5 border border-white/40 dark:border-white/5 text-slate-500 dark:text-slate-400 hover:text-cyan-600 dark:hover:text-cyan-400 hover:bg-white/60 dark:hover:bg-white/10 hover:shadow-lg hover:shadow-cyan-900/10 dark:hover:shadow-cyan-900/20 hover:-translate-y-1 transition-all duration-300" title={link.platform}><Icon name={link.icon} size={18}/></a>
                       ))}
                   </div>
               </aside>
@@ -888,7 +1005,7 @@ export const App: React.FC = () => {
                   
                   {viewCategory && (
                       <div className="mb-8 animate-fade-in">
-                          <button onClick={() => setViewCategory(null)} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-sm font-bold text-slate-300 hover:bg-white/10 hover:border-cyan-500/30 hover:text-white transition-all group">
+                          <button onClick={() => setViewCategory(null)} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/50 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-sm font-bold text-slate-600 dark:text-slate-300 hover:bg-white/80 dark:hover:bg-white/10 hover:border-cyan-500/30 hover:text-cyan-600 dark:hover:text-white transition-all group">
                               <ArrowLeft size={16} className="group-hover:-translate-x-1 transition-transform"/> 返回总览
                           </button>
                       </div>
@@ -905,12 +1022,16 @@ export const App: React.FC = () => {
                           return (
                               <section key={cat.id} id={cat.id} className="scroll-mt-36 animate-fade-in-up">
                                   <div className="flex items-center gap-4 mb-6 group cursor-pointer" onClick={() => !isCommon && !viewCategory && setViewCategory(cat.id)}>
-                                      <div className={cn("p-2.5 rounded-xl transition-all duration-300 border border-transparent", isCommon ? "bg-orange-500/10 text-orange-400 border-orange-500/20" : "bg-white/5 text-slate-400 group-hover:bg-cyan-500 group-hover:text-white group-hover:shadow-[0_0_15px_rgba(34,211,238,0.4)]")}>
+                                      <div className={cn("p-2.5 rounded-xl transition-all duration-300 border border-transparent", 
+                                          isCommon 
+                                            ? "bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20" 
+                                            : "bg-white/50 dark:bg-white/5 text-slate-500 dark:text-slate-400 group-hover:bg-cyan-500 group-hover:text-white group-hover:shadow-[0_0_15px_rgba(34,211,238,0.4)]"
+                                      )}>
                                           <Icon name={cat.icon} size={22}/>
                                       </div>
-                                      <h2 className="text-xl font-bold text-slate-100 tracking-tight">{cat.title}</h2>
+                                      <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">{cat.title}</h2>
                                       {!isCommon && !viewCategory && (
-                                          <div className="opacity-0 group-hover:opacity-100 transition-opacity transform translate-x-[-10px] group-hover:translate-x-0 duration-300 text-cyan-400">
+                                          <div className="opacity-0 group-hover:opacity-100 transition-opacity transform translate-x-[-10px] group-hover:translate-x-0 duration-300 text-cyan-600 dark:text-cyan-400">
                                               <ChevronRight size={18}/>
                                           </div>
                                       )}
@@ -918,31 +1039,43 @@ export const App: React.FC = () => {
                                   
                                   <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
                                       {displayLinks.map(link => (
-                                          <div key={link.id} onClick={() => handleLinkClick(cat, link)} className="group relative flex flex-col p-5 rounded-3xl bg-slate-900/40 backdrop-blur-md border border-white/5 shadow-sm hover:shadow-2xl hover:shadow-cyan-900/20 hover:scale-[1.02] hover:-translate-y-1 transition-all duration-300 cursor-pointer overflow-hidden ring-1 ring-transparent hover:ring-cyan-500/30 hover:border-cyan-500/30" style={{ opacity: settings.cardOpacity / 100 }}>
-                                              <div className="absolute -inset-px bg-gradient-to-r from-cyan-500/20 to-purple-500/20 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"/>
+                                          <div 
+                                            key={link.id} 
+                                            onClick={() => handleLinkClick(cat, link)} 
+                                            className={cn(
+                                                "group relative flex flex-col p-5 rounded-3xl transition-all duration-300 cursor-pointer overflow-hidden ring-1 ring-transparent",
+                                                // Updated Card Styles for Light/Dark
+                                                "bg-white/60 dark:bg-slate-900/40 backdrop-blur-md border border-white/50 dark:border-white/5 shadow-sm dark:shadow-sm",
+                                                clickedLinkId === link.id 
+                                                    ? "animate-pop bg-cyan-500/10 border-cyan-500/30 ring-cyan-500/30" 
+                                                    : "hover:shadow-2xl hover:shadow-cyan-900/10 dark:hover:shadow-cyan-900/20 hover:scale-[1.02] hover:-translate-y-1 hover:ring-cyan-500/30 hover:border-cyan-500/30"
+                                            )} 
+                                            style={{ opacity: settings.cardOpacity / 100 }}
+                                          >
+                                              <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/10 to-purple-500/10 dark:from-cyan-500/20 dark:to-purple-500/20 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"/>
                                               
                                               <div className="flex items-start justify-between mb-4 relative z-10">
-                                                  <div className="p-1.5 bg-slate-800/80 rounded-2xl shadow-inner group-hover:shadow-cyan-500/20 transition-all border border-white/5">
+                                                  <div className="p-1.5 bg-white/80 dark:bg-slate-800/80 rounded-2xl shadow-inner group-hover:shadow-cyan-500/20 transition-all border border-slate-100 dark:border-white/5">
                                                       <Favicon url={link.url} size={32} className="rounded-xl"/>
                                                   </div>
-                                                  <div className="w-8 h-8 rounded-full bg-white/5 group-hover:bg-cyan-500/20 flex items-center justify-center text-slate-500 group-hover:text-cyan-300 transition-all duration-300 scale-90 group-hover:scale-100">
+                                                  <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-white/5 group-hover:bg-cyan-500/20 flex items-center justify-center text-slate-400 dark:text-slate-500 group-hover:text-cyan-600 dark:group-hover:text-cyan-300 transition-all duration-300 scale-90 group-hover:scale-100">
                                                       <ArrowLeft size={16} className="rotate-135"/>
                                                   </div>
                                               </div>
-                                              <h3 className="font-bold text-slate-200 text-[15px] truncate mb-1 relative z-10 group-hover:text-cyan-300 transition-colors">{link.title}</h3>
-                                              <p className="text-xs text-slate-500 group-hover:text-slate-400 line-clamp-2 leading-relaxed relative z-10 transition-colors">{link.description}</p>
+                                              <h3 className="font-bold text-slate-800 dark:text-slate-200 text-[15px] truncate mb-1 relative z-10 group-hover:text-cyan-600 dark:group-hover:text-cyan-300 transition-colors">{link.title}</h3>
+                                              <p className="text-xs text-slate-500 dark:text-slate-500 group-hover:text-slate-600 dark:group-hover:text-slate-400 line-clamp-2 leading-relaxed relative z-10 transition-colors">{link.description}</p>
                                               
                                               {(link.pros || link.cons) && (
                                                   <div className="mt-4 flex gap-2 opacity-60 group-hover:opacity-100 transition-opacity relative z-10">
-                                                      {link.pros && <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-[0_0_8px_rgba(16,185,129,0.1)]">{link.pros}</span>}
-                                                      {link.cons && <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-800 text-slate-400 border border-slate-700">{link.cons}</span>}
+                                                      {link.pros && <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shadow-[0_0_8px_rgba(16,185,129,0.1)]">{link.pros}</span>}
+                                                      {link.cons && <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700">{link.cons}</span>}
                                                   </div>
                                               )}
                                           </div>
                                       ))}
                                       {hasMore && (
-                                          <button onClick={() => setViewCategory(cat.id)} className="flex flex-col items-center justify-center gap-3 p-5 rounded-3xl border border-dashed border-white/10 bg-white/[0.02] text-slate-500 hover:border-cyan-500/30 hover:text-cyan-400 hover:bg-cyan-500/5 transition-all group backdrop-blur-sm min-h-[140px]">
-                                              <div className="w-12 h-12 rounded-full bg-white/5 group-hover:bg-cyan-500/10 shadow-sm flex items-center justify-center transition-all group-hover:scale-110 duration-300">
+                                          <button onClick={() => setViewCategory(cat.id)} className="flex flex-col items-center justify-center gap-3 p-5 rounded-3xl border border-dashed border-slate-300 dark:border-white/10 bg-white/30 dark:bg-white/[0.02] text-slate-400 dark:text-slate-500 hover:border-cyan-500/30 hover:text-cyan-600 dark:hover:text-cyan-400 hover:bg-cyan-500/5 transition-all group backdrop-blur-sm min-h-[140px]">
+                                              <div className="w-12 h-12 rounded-full bg-white/50 dark:bg-white/5 group-hover:bg-cyan-500/10 shadow-sm flex items-center justify-center transition-all group-hover:scale-110 duration-300">
                                                   <ChevronRight size={24}/>
                                               </div>
                                               <span className="text-xs font-bold tracking-wide">查看全部 ({cat.links.length})</span>
@@ -988,6 +1121,33 @@ export const App: React.FC = () => {
           
           <ToastContainer toasts={toasts} remove={(id) => setToasts(p => p.filter(t => t.id !== id))} />
           
+          {showAddCatModal && (
+                <Modal title="创建新分类" onClose={() => setShowAddCatModal(false)} icon={<Plus className="text-cyan-400"/>}>
+                    <div className="p-6 space-y-6">
+                        <div>
+                            <label className="block text-sm font-bold text-slate-400 mb-2">分类名称</label>
+                            <input 
+                                autoFocus
+                                value={newCatName} 
+                                onChange={(e) => setNewCatName(e.target.value)} 
+                                onKeyDown={(e) => e.key === 'Enter' && handleCreateCategory()}
+                                className="w-full p-3 rounded-xl bg-slate-950 border border-slate-800 outline-none focus:border-cyan-500 text-white placeholder:text-slate-600" 
+                                placeholder="例如: 电影、设计、阅读..."
+                            />
+                            <p className="mt-2 text-xs text-slate-500">AI 将根据名称自动匹配合适的图标。</p>
+                        </div>
+                        <button 
+                            onClick={handleCreateCategory} 
+                            disabled={isCreatingCat || !newCatName.trim()} 
+                            className="w-full py-3 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {isCreatingCat ? <LoadingSpinner/> : <Wand2 size={18}/>}
+                            {isCreatingCat ? '正在匹配图标...' : '创建分类'}
+                        </button>
+                    </div>
+                </Modal>
+          )}
+
           {showGenLinksModal && (
               <Modal title={`AI 生成: ${showGenLinksModal.title}`} onClose={() => setShowGenLinksModal(null)} icon={<Wand2 className="text-cyan-400"/>}>
                    <div className="p-6 space-y-6">
@@ -1042,8 +1202,8 @@ export const App: React.FC = () => {
                         <div>
                             <label className="block text-sm font-bold text-slate-400 mb-2">API Key 来源</label>
                             <div className="flex gap-4 mb-2">
-                                <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer"><input type="radio" checked={aiKeySource === 'manual'} onChange={() => { setAiKeySource('manual'); setEditingAiConfig({...editingAiConfig, envSlot: undefined}); }} className="accent-cyan-500"/> 手动输入</label>
-                                <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer"><input type="radio" checked={aiKeySource === 'env'} onChange={() => { setAiKeySource('env'); setEditingAiConfig({...editingAiConfig, apiKey: ''}); }} className="accent-cyan-500"/> 系统环境变量</label>
+                                <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer"><input type="radio" name="apiKeySource" checked={aiKeySource === 'manual'} onChange={() => { setAiKeySource('manual'); setEditingAiConfig({...editingAiConfig, envSlot: undefined}); }} className="accent-cyan-500"/> 手动输入</label>
+                                <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer"><input type="radio" name="apiKeySource" checked={aiKeySource === 'env'} onChange={() => { setAiKeySource('env'); setEditingAiConfig({...editingAiConfig, apiKey: ''}); }} className="accent-cyan-500"/> 系统环境变量</label>
                             </div>
                             {aiKeySource === 'manual' ? (
                                 <input type="password" placeholder="sk-..." value={editingAiConfig.apiKey} onChange={(e) => setEditingAiConfig({...editingAiConfig, apiKey: e.target.value})} className="w-full p-3 rounded-xl bg-slate-950 border border-slate-800 outline-none focus:border-cyan-500 font-mono text-sm"/>
@@ -1051,7 +1211,7 @@ export const App: React.FC = () => {
                                 <select value={editingAiConfig.envSlot || ''} onChange={(e) => setEditingAiConfig({...editingAiConfig, envSlot: e.target.value})} className="w-full p-3 rounded-xl bg-slate-950 border border-slate-800 outline-none focus:border-cyan-500 text-sm">
                                     <option value="">选择环境变量...</option>
                                     <option value="API_KEY">API_KEY (主)</option>
-                                    {[1,2,3,4,5].map(n => <option key={n} value={`VITE_CUSTOM_API_KEY_${n}`}>VITE_CUSTOM_API_KEY_{n}</option>)}
+                                    {[1,2,3,4,5].map(n => <option key={n} value={`CUSTOM_API_KEY_${n}`}>CUSTOM_API_KEY_{n}</option>)}
                                 </select>
                             )}
                         </div>

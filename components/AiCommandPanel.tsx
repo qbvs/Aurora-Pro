@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { 
   Sparkles, MessageCircleQuestion, Compass, Send, 
@@ -131,6 +130,9 @@ export const AiCommandPanel: React.FC<AiCommandPanelProps> = ({
       ref={containerRef}
       className={cn(
         "relative w-full transition-all duration-500 ease-out overflow-hidden group mb-12",
+        // Styles moved from inner div to outer container to ensure correct clipping
+        "rounded-3xl shadow-lg border border-white/50 dark:border-white/10",
+        "bg-white/60 dark:bg-slate-900/40 backdrop-blur-md",
         mode === 'greeting' ? "h-48 cursor-default" : "h-auto min-h-[192px]"
       )}
       onMouseEnter={() => {
@@ -140,12 +142,10 @@ export const AiCommandPanel: React.FC<AiCommandPanelProps> = ({
       onMouseLeave={handleMouseLeave}
     >
       {/* Background Effects */}
-      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-md rounded-3xl shadow-lg transition-all duration-500">
-         {/* Inner Glow Border */}
-         <div className="absolute inset-0 rounded-3xl ring-1 ring-inset ring-white/10 pointer-events-none" />
-         <div className="absolute inset-0 rounded-3xl bg-gradient-to-r from-cyan-500/10 to-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-1000 pointer-events-none"/>
-         {mode === 'result' && <div className="absolute inset-0 rounded-3xl bg-slate-950/50 transition-colors duration-500"/>}
-      </div>
+      {/* Inner Glow Border */}
+      <div className="absolute inset-0 rounded-3xl ring-1 ring-inset ring-white/20 dark:ring-white/10 pointer-events-none" />
+      <div className="absolute inset-0 rounded-3xl bg-gradient-to-r from-cyan-500/10 to-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-1000 pointer-events-none"/>
+      {mode === 'result' && <div className="absolute inset-0 rounded-3xl bg-white/50 dark:bg-slate-950/50 transition-colors duration-500"/>}
 
       <div className="relative z-10 w-full h-full flex flex-col justify-center items-center p-6 md:p-10">
         
@@ -156,8 +156,9 @@ export const AiCommandPanel: React.FC<AiCommandPanelProps> = ({
                 mode === 'greeting' ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-95 -translate-y-4 pointer-events-none"
             )}
         >
+            {/* Divider line will now be properly clipped by the parent's rounded-3xl */}
             <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-cyan-500/50 to-transparent opacity-50"></div>
-            <p className="text-2xl md:text-3xl font-medium text-transparent bg-clip-text bg-gradient-to-r from-white via-slate-200 to-slate-400 leading-relaxed tracking-wide font-serif italic drop-shadow-sm">
+            <p className="text-2xl md:text-3xl font-medium text-transparent bg-clip-text bg-gradient-to-r from-slate-700 via-slate-500 to-slate-700 dark:from-white dark:via-slate-200 dark:to-slate-400 leading-relaxed tracking-wide font-serif italic drop-shadow-sm">
               "{greeting}"
             </p>
             <div className="mt-6 flex justify-center gap-2">
@@ -173,7 +174,7 @@ export const AiCommandPanel: React.FC<AiCommandPanelProps> = ({
             )}
         >
             <div className="w-full relative group/input">
-                <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none text-slate-500 group-focus-within/input:text-cyan-400 transition-colors">
+                <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none text-slate-400 dark:text-slate-500 group-focus-within/input:text-cyan-600 dark:group-focus-within/input:text-cyan-400 transition-colors">
                     <Sparkles size={20}/>
                 </div>
                 <input
@@ -185,7 +186,7 @@ export const AiCommandPanel: React.FC<AiCommandPanelProps> = ({
                          if (e.key === 'Enter') handleDiscover(); // Default action
                     }}
                     placeholder="输入问题或主题，例如：'推荐几个好用的配色网站'..."
-                    className="w-full h-14 pl-12 pr-4 rounded-2xl bg-white/5 border border-white/10 hover:border-white/20 focus:bg-slate-900 focus:border-cyan-500/50 shadow-inner focus:shadow-lg focus:shadow-cyan-500/10 outline-none text-lg text-slate-200 placeholder:text-slate-500 transition-all text-center"
+                    className="w-full h-14 pl-12 pr-4 rounded-2xl bg-white/50 dark:bg-white/5 border border-slate-200 dark:border-white/10 hover:border-cyan-500/30 dark:hover:border-white/20 focus:bg-white dark:focus:bg-slate-900 focus:border-cyan-500/50 shadow-inner focus:shadow-lg focus:shadow-cyan-500/10 outline-none text-lg text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500 transition-all text-center"
                     autoFocus={mode === 'input'}
                 />
             </div>
@@ -193,21 +194,21 @@ export const AiCommandPanel: React.FC<AiCommandPanelProps> = ({
             <div className="flex flex-wrap justify-center gap-4">
                  <button 
                     onClick={handleRefresh}
-                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 text-slate-300 hover:text-white transition-all text-sm font-bold active:scale-95"
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-all text-sm font-bold active:scale-95"
                  >
                     <RotateCw size={16} className={isLoading ? "animate-spin" : ""}/> 换一句
                  </button>
                  <button 
                     onClick={handleAsk}
                     disabled={!inputValue.trim()}
-                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 hover:bg-indigo-500/20 text-indigo-300 hover:text-indigo-200 transition-all text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 hover:text-indigo-800 dark:hover:text-indigo-200 transition-all text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
                  >
                     <MessageCircleQuestion size={16}/> 快速提问
                  </button>
                  <button 
                     onClick={handleDiscover}
                     disabled={!inputValue.trim()}
-                    className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-cyan-500/20 border border-cyan-500/30 hover:bg-cyan-500/30 text-cyan-300 hover:text-cyan-200 shadow-[0_0_15px_rgba(34,211,238,0.15)] transition-all text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
+                    className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-cyan-50 dark:bg-cyan-500/20 border border-cyan-200 dark:border-cyan-500/30 hover:bg-cyan-100 dark:hover:bg-cyan-500/30 text-cyan-600 dark:text-cyan-300 hover:text-cyan-800 dark:hover:text-cyan-200 shadow-sm dark:shadow-[0_0_15px_rgba(34,211,238,0.15)] transition-all text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
                  >
                     <Compass size={16}/> 发现网站
                  </button>
@@ -223,7 +224,7 @@ export const AiCommandPanel: React.FC<AiCommandPanelProps> = ({
         >   
             {/* Loading State */}
             {isLoading && (
-                <div className="flex flex-col items-center justify-center py-10 gap-4 text-cyan-400">
+                <div className="flex flex-col items-center justify-center py-10 gap-4 text-cyan-600 dark:text-cyan-400">
                     <Loader2 size={32} className="animate-spin"/>
                     <span className="text-sm font-bold animate-pulse">AI 正在思考中...</span>
                 </div>
@@ -233,17 +234,17 @@ export const AiCommandPanel: React.FC<AiCommandPanelProps> = ({
             {!isLoading && (
                 <div className="animate-fade-in w-full max-w-4xl mx-auto">
                     <div className="flex justify-between items-center mb-6">
-                        <div className="flex items-center gap-3 text-slate-400 text-sm font-bold">
-                            <span className="bg-white/10 px-3 py-1 rounded-lg text-slate-300">Q</span>
+                        <div className="flex items-center gap-3 text-slate-500 dark:text-slate-400 text-sm font-bold">
+                            <span className="bg-slate-200 dark:bg-white/10 px-3 py-1 rounded-lg text-slate-700 dark:text-slate-300">Q</span>
                             <span>{inputValue}</span>
                         </div>
-                        <button onClick={reset} className="p-2 hover:bg-white/10 rounded-full text-slate-400 hover:text-white transition-colors">
+                        <button onClick={reset} className="p-2 hover:bg-slate-200 dark:hover:bg-white/10 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors">
                             <X size={20}/>
                         </button>
                     </div>
 
                     {resultType === 'text' && (
-                        <div className="p-6 rounded-2xl bg-slate-800/50 border border-white/10 text-slate-200 leading-relaxed text-lg shadow-inner">
+                        <div className="p-6 rounded-2xl bg-white/50 dark:bg-slate-800/50 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-200 leading-relaxed text-lg shadow-inner">
                             {textResult}
                         </div>
                     )}
@@ -253,7 +254,7 @@ export const AiCommandPanel: React.FC<AiCommandPanelProps> = ({
                             {siteResults.map((site, idx) => {
                                 const isAdded = addedSiteIds.has(idx.toString());
                                 return (
-                                    <div key={idx} className="flex flex-col p-4 rounded-xl bg-slate-950/60 border border-slate-800 hover:border-cyan-500/30 transition-all group/card">
+                                    <div key={idx} className="flex flex-col p-4 rounded-xl bg-white/50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 hover:border-cyan-500/30 transition-all group/card shadow-sm">
                                         <div className="flex items-start justify-between mb-3">
                                             <Favicon url={site.url || ''} size={24} className="rounded-md"/>
                                             <button 
@@ -261,15 +262,15 @@ export const AiCommandPanel: React.FC<AiCommandPanelProps> = ({
                                                 disabled={isAdded}
                                                 className={cn(
                                                     "p-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-all",
-                                                    isAdded ? "bg-emerald-500/20 text-emerald-400 cursor-default" : "bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500 hover:text-white"
+                                                    isAdded ? "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 cursor-default" : "bg-cyan-50 dark:bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500 hover:text-white"
                                                 )}
                                             >
-                                                {isAdded ? <><span className="w-1.5 h-1.5 rounded-full bg-emerald-400"/> 已添加</> : <Plus size={14}/>}
+                                                {isAdded ? <><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400"/> 已添加</> : <Plus size={14}/>}
                                             </button>
                                         </div>
-                                        <div className="font-bold text-slate-200 mb-1 truncate">{site.title}</div>
+                                        <div className="font-bold text-slate-800 dark:text-slate-200 mb-1 truncate">{site.title}</div>
                                         <div className="text-xs text-slate-500 line-clamp-2 mb-2 h-8">{site.description}</div>
-                                        <a href={site.url} target="_blank" rel="noopener noreferrer" className="mt-auto text-[10px] text-slate-600 hover:text-cyan-400 flex items-center gap-1 transition-colors w-fit">
+                                        <a href={site.url} target="_blank" rel="noopener noreferrer" className="mt-auto text-[10px] text-slate-600 dark:text-slate-600 hover:text-cyan-600 dark:hover:text-cyan-400 flex items-center gap-1 transition-colors w-fit">
                                             访问 <ArrowRight size={10}/>
                                         </a>
                                     </div>
@@ -279,7 +280,7 @@ export const AiCommandPanel: React.FC<AiCommandPanelProps> = ({
                     )}
                     
                     <div className="mt-6 flex justify-center">
-                         <button onClick={reset} className="text-sm font-bold text-slate-500 hover:text-cyan-400 transition-colors flex items-center gap-2">
+                         <button onClick={reset} className="text-sm font-bold text-slate-500 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors flex items-center gap-2">
                             继续提问 <ArrowRight size={14}/>
                          </button>
                     </div>
