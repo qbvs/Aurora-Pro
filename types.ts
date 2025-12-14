@@ -8,6 +8,7 @@ export interface LinkItem {
   clickCount?: number; // Track usage frequency
   pros?: string; // e.g. "永久免费计划"
   cons?: string; // e.g. "不可商业用"
+  language?: string; // e.g. "中文", "英语"
 }
 
 export interface Category {
@@ -80,6 +81,7 @@ export interface AIResponse {
   searchUrlPattern?: string; 
   pros?: string;
   cons?: string;
+  language?: string;
 }
 
 export interface LogEntry {

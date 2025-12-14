@@ -162,7 +162,7 @@ export const analyzeUrl = async (url: string): Promise<AIResponse> => {
   const config = getActiveConfig();
   if (!config.apiKey) throw new Error("API Key 未配置");
 
-  const promptText = `分析网址: "${url}"。请返回简体中文的 JSON 对象。格式: { "title": "网站名称", "description": "10-15字的中文简介", "brandColor": "#十六进制颜色码", "pros": "4-8字的优点标签", "cons": "4-8字的缺点标签" }`;
+  const promptText = `分析网址: "${url}"。请返回简体中文的 JSON 对象。格式: { "title": "网站名称", "description": "10-15字的中文简介", "brandColor": "#十六进制颜色码", "pros": "4-8字的优点标签", "cons": "4-8字的缺点标签", "language": "网站主要语言(如: 中文、英语、日语)" }`;
 
   try {
     let rawText = '';
@@ -189,7 +189,7 @@ export const generateCategoryLinks = async (categoryTitle: string, count: number
   const config = getActiveConfig();
   if (!config.apiKey) throw new Error("API Key 未配置");
   
-  const promptText = `为 "${categoryTitle}" 推荐 ${count} 个最优秀的网站。请返回简体中文的 JSON 数组。不要包含以下网址: ${existingUrls.slice(0, 10).join(',')}。格式: [{ "title": "", "url": "https://...", "description": "", "color": "#hex", "pros": "4-8字优点", "cons": "4-8字缺点" }]`;
+  const promptText = `为 "${categoryTitle}" 推荐 ${count} 个最优秀的网站。请返回简体中文的 JSON 数组。不要包含以下网址: ${existingUrls.slice(0, 10).join(',')}。格式: [{ "title": "", "url": "https://...", "description": "", "color": "#hex", "pros": "4-8字优点", "cons": "4-8字缺点", "language": "主要语言(如: 中文、英语)" }]`;
 
   try {
     let rawText = '';

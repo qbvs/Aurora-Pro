@@ -7,7 +7,7 @@ import {
   Activity, CircleCheck, Bot, Key, Server, TriangleAlert, ChevronDown, ChevronRight,
   ChevronUp, Link as LinkIcon, Power, QrCode, Sparkles, ScanLine, Menu, Terminal, Monitor,
   Home, ArrowLeft, Clock, Compass, Calendar, Cloud, CloudFog, CloudDrizzle, CloudRain, CloudHail, CloudSnow, CloudRainWind, CloudLightning, Thermometer,
-  ShieldCheck, ShieldAlert
+  ShieldCheck, ShieldAlert, Languages
 } from 'lucide-react';
 import { 
   Category, LinkItem, AppSettings, SearchEngine, 
@@ -520,7 +520,7 @@ export const App: React.FC = () => {
               if (allExistingUrls.has(normalizedUrl)) continue; 
               validLinks.push({ 
                   id: `gen-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`, 
-                  title: l.title, url: l.url, description: l.description || '', color: l.color || '#666', clickCount: 0, pros: l.pros, cons: l.cons 
+                  title: l.title, url: l.url, description: l.description || '', color: l.color || '#666', clickCount: 0, pros: l.pros, cons: l.cons, language: l.language
               }); 
               allExistingUrls.add(normalizedUrl); 
           } 
@@ -536,7 +536,7 @@ export const App: React.FC = () => {
       setIsAiLoading(true); 
       try { 
           const result = await analyzeUrl(linkForm.url); 
-          setLinkForm(prev => ({ ...prev, title: result.title, description: result.description, pros: result.pros, cons: result.cons, color: result.brandColor })); 
+          setLinkForm(prev => ({ ...prev, title: result.title, description: result.description, pros: result.pros, cons: result.cons, color: result.brandColor, language: result.language })); 
           addToast('success', 'AI 链接分析完成'); 
       } catch (e: any) { addToast('error', 'AI 分析失败: ' + e.message); 
       } finally { setIsAiLoading(false); } 
@@ -547,7 +547,7 @@ export const App: React.FC = () => {
       await isFaviconValid(linkForm.url); 
       const newLink: LinkItem = { 
           id: linkForm.id || `l-${Date.now()}`, 
-          title: linkForm.title, url: linkForm.url.startsWith('http') ? linkForm.url : `https://${linkForm.url}`, description: linkForm.description || '', color: linkForm.color || '#666', clickCount: linkForm.clickCount || 0, pros: linkForm.pros, cons: linkForm.cons 
+          title: linkForm.title, url: linkForm.url.startsWith('http') ? linkForm.url : `https://${linkForm.url}`, description: linkForm.description || '', color: linkForm.color || '#666', clickCount: linkForm.clickCount || 0, pros: linkForm.pros, cons: linkForm.cons, language: linkForm.language 
       }; 
       let newCats = categories.map(cat => { 
           if (cat.id !== editingLink.catId) return cat; 
@@ -586,51 +586,6 @@ export const App: React.FC = () => {
       const newLinks = await generateCategoryLinks(topic, 3, Array.from(allExistingUrls));
       return newLinks.filter(l => l.title && l.url);
   };
-
-  const handleAddDiscoveryLink = (link: Partial<LinkItem>) => {
-      if (!link.title || !link.url) return;
-      
-      // Determine target category: either current focused one, or Common/First one
-      const targetCatId = viewCategory || (categories.length > 0 ? categories[0].id : null);
-      if (!targetCatId) return;
-
-      const newLink: LinkItem = {
-          id: `gen-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-          title: link.title,
-          url: link.url,
-          description: link.description || '',
-          color: link.color || '#666',
-          pros: link.pros,
-          cons: link.cons,
-          clickCount: 0
-      };
-
-      const newCats = categories.map(cat => {
-          if (cat.id !== targetCatId) return cat;
-          // If it's Common Recs (which shouldn't happen usually as viewCategory logic handles it), warn user? 
-          // Actually logic says: updateCommonRecs recalculates Common. So we should add to a REAL category.
-          // If target is Common, find the first real category.
-          if (cat.id === COMMON_REC_ID) return cat; 
-          return { ...cat, links: [...cat.links, newLink] };
-      });
-      
-      // If target was Common (rec-1), we actually didn't add it above.
-      // Let's force add to the first non-common category if viewCategory was null or common.
-      let finalCats = newCats;
-      if (targetCatId === COMMON_REC_ID) {
-           const firstReal = categories.find(c => c.id !== COMMON_REC_ID);
-           if (firstReal) {
-               finalCats = categories.map(c => c.id === firstReal.id ? { ...c, links: [...c.links, newLink] } : c);
-               addToast('success', `已添加到分类: ${firstReal.title}`);
-           }
-      } else {
-           const catName = categories.find(c => c.id === targetCatId)?.title;
-           addToast('success', `已添加到分类: ${catName}`);
-      }
-
-      handleSaveData(finalCats);
-  };
-
 
   // --- Render Sections ---
   const renderSidebar = () => (
@@ -990,7 +945,12 @@ export const App: React.FC = () => {
                     type="text" 
                     value={searchTerm} 
                     onChange={(e) => setSearchTerm(e.target.value)} 
-                    onKeyDown={(e) => { if (e.key === 'Enter' && searchTerm.trim()) window.open(activeEngine.searchUrlPattern + encodeURIComponent(searchTerm), settings.openInNewTab ? '_blank' : '_self'); }} 
+                    onKeyDown={(e) => { 
+                        if (e.key === 'Enter' && searchTerm.trim()) {
+                            window.open(activeEngine.searchUrlPattern + encodeURIComponent(searchTerm), settings.openInNewTab ? '_blank' : '_self');
+                            setSearchTerm(''); // Clear input after search
+                        }
+                    }} 
                     className="w-full h-11 pl-12 pr-4 rounded-2xl bg-slate-100/50 dark:bg-white/5 border border-slate-200/50 dark:border-white/5 focus:bg-white dark:focus:bg-slate-900/80 focus:border-cyan-500/30 dark:focus:border-cyan-500/50 shadow-inner focus:shadow-lg focus:shadow-cyan-500/10 outline-none text-sm font-medium transition-all text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500 backdrop-blur-md" 
                     placeholder={`使用 ${activeEngine?.name} 搜索...`}
                  />
@@ -1110,7 +1070,7 @@ export const App: React.FC = () => {
                                   onRefreshGreeting={handleAiRefreshGreeting}
                                   onAskQuestion={askSimpleQuestion}
                                   onDiscoverSites={handleAiDiscovery}
-                                  onAddLink={handleAddDiscoveryLink}
+                                  onAddLink={() => {}} // Disabled function, button removed in component
                               />
                           </div>
                       )}
@@ -1204,8 +1164,9 @@ export const App: React.FC = () => {
                                                   <h3 className="font-bold text-slate-800 dark:text-slate-200 text-[15px] truncate mb-1 relative z-10 group-hover:text-cyan-600 dark:group-hover:text-cyan-300 transition-colors">{link.title}</h3>
                                                   <p className="text-xs text-slate-500 dark:text-slate-500 group-hover:text-slate-600 dark:group-hover:text-slate-400 line-clamp-2 leading-relaxed relative z-10 transition-colors">{link.description}</p>
                                                   
-                                                  {(link.pros || link.cons) && (
+                                                  {(link.pros || link.cons || link.language) && (
                                                       <div className="mt-4 flex gap-2 opacity-60 group-hover:opacity-100 transition-opacity relative z-10">
+                                                          {link.language && <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">{link.language}</span>}
                                                           {link.pros && <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shadow-[0_0_8px_rgba(16,185,129,0.1)]">{link.pros}</span>}
                                                           {link.cons && <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700">{link.cons}</span>}
                                                       </div>
@@ -1304,7 +1265,11 @@ export const App: React.FC = () => {
                        <div className="flex gap-2"><input placeholder="URL (https://...)" value={linkForm.url || ''} onChange={(e) => setLinkForm({...linkForm, url: e.target.value})} className="flex-1 p-3 rounded-xl bg-slate-950 border border-slate-800 outline-none focus:border-cyan-500"/><button onClick={handleAiFillLink} disabled={isAiLoading} className="px-4 bg-cyan-900/30 text-cyan-400 border border-cyan-500/20 rounded-xl font-bold hover:bg-cyan-900/50 flex items-center gap-2 text-sm">{isAiLoading ? <LoadingSpinner/> : <Wand2 size={16}/>} 智能识别</button></div>
                        <input placeholder="标题" value={linkForm.title || ''} onChange={(e) => setLinkForm({...linkForm, title: e.target.value})} className="w-full p-3 rounded-xl bg-slate-950 border border-slate-800 outline-none focus:border-cyan-500"/>
                        <input placeholder="描述" value={linkForm.description || ''} onChange={(e) => setLinkForm({...linkForm, description: e.target.value})} className="w-full p-3 rounded-xl bg-slate-950 border border-slate-800 outline-none focus:border-cyan-500"/>
-                       <div className="grid grid-cols-2 gap-4"><input placeholder="优点 (短标签)" value={linkForm.pros || ''} onChange={(e) => setLinkForm({...linkForm, pros: e.target.value})} className="p-3 rounded-xl bg-slate-950 border border-slate-800 outline-none focus:border-cyan-500"/><input placeholder="缺点 (短标签)" value={linkForm.cons || ''} onChange={(e) => setLinkForm({...linkForm, cons: e.target.value})} className="p-3 rounded-xl bg-slate-950 border border-slate-800 outline-none focus:border-cyan-500"/></div>
+                       <div className="grid grid-cols-3 gap-4">
+                           <input placeholder="优点 (短标签)" value={linkForm.pros || ''} onChange={(e) => setLinkForm({...linkForm, pros: e.target.value})} className="p-3 rounded-xl bg-slate-950 border border-slate-800 outline-none focus:border-cyan-500"/>
+                           <input placeholder="缺点 (短标签)" value={linkForm.cons || ''} onChange={(e) => setLinkForm({...linkForm, cons: e.target.value})} className="p-3 rounded-xl bg-slate-950 border border-slate-800 outline-none focus:border-cyan-500"/>
+                           <input placeholder="语言 (如: 中文)" value={linkForm.language || ''} onChange={(e) => setLinkForm({...linkForm, language: e.target.value})} className="p-3 rounded-xl bg-slate-950 border border-slate-800 outline-none focus:border-cyan-500"/>
+                       </div>
                        <button onClick={handleSaveLink} className="w-full py-3 bg-cyan-600 text-white font-bold rounded-xl hover:bg-cyan-500">保存</button>
                   </div>
               </Modal>

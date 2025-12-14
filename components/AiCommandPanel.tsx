@@ -24,7 +24,6 @@ export const AiCommandPanel: React.FC<AiCommandPanelProps> = ({
   onRefreshGreeting,
   onAskQuestion,
   onDiscoverSites,
-  onAddLink,
 }) => {
   const [greeting, setGreeting] = useState(initialGreeting);
   const [mode, setMode] = useState<Mode>('greeting');
@@ -35,7 +34,6 @@ export const AiCommandPanel: React.FC<AiCommandPanelProps> = ({
   const [resultType, setResultType] = useState<ResultType>('text');
   const [textResult, setTextResult] = useState('');
   const [siteResults, setSiteResults] = useState<Partial<LinkItem>[]>([]);
-  const [addedSiteIds, setAddedSiteIds] = useState<Set<string>>(new Set());
 
   // Interaction state
   const containerRef = useRef<HTMLDivElement>(null);
@@ -91,7 +89,6 @@ export const AiCommandPanel: React.FC<AiCommandPanelProps> = ({
     setMode('result');
     setResultType('sites');
     setSiteResults([]); 
-    setAddedSiteIds(new Set());
     try {
       const sites = await onDiscoverSites(inputValue);
       setSiteResults(sites);
@@ -101,11 +98,6 @@ export const AiCommandPanel: React.FC<AiCommandPanelProps> = ({
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const handleAddSite = (site: Partial<LinkItem>, index: number) => {
-    onAddLink(site);
-    setAddedSiteIds(prev => new Set(prev).add(index.toString()));
   };
 
   const reset = () => {
@@ -256,27 +248,19 @@ export const AiCommandPanel: React.FC<AiCommandPanelProps> = ({
                     {resultType === 'sites' && (
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                             {siteResults.map((site, idx) => {
-                                const isAdded = addedSiteIds.has(idx.toString());
                                 return (
                                     <div key={idx} className="flex flex-col p-4 rounded-xl bg-white/50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 hover:border-cyan-500/30 transition-all group/card shadow-sm">
                                         <div className="flex items-start justify-between mb-3">
                                             <Favicon url={site.url || ''} size={24} className="rounded-md"/>
-                                            <button 
-                                                onClick={() => !isAdded && handleAddSite(site, idx)}
-                                                disabled={isAdded}
-                                                className={cn(
-                                                    "p-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-all",
-                                                    isAdded ? "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 cursor-default" : "bg-cyan-50 dark:bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500 hover:text-white"
-                                                )}
-                                            >
-                                                {isAdded ? <><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400"/> 已添加</> : <Plus size={14}/>}
-                                            </button>
                                         </div>
                                         <div className="font-bold text-slate-800 dark:text-slate-200 mb-1 truncate">{site.title}</div>
                                         <div className="text-xs text-slate-500 line-clamp-2 mb-2 h-8">{site.description}</div>
-                                        <a href={site.url} target="_blank" rel="noopener noreferrer" className="mt-auto text-[10px] text-slate-600 dark:text-slate-600 hover:text-cyan-600 dark:hover:text-cyan-400 flex items-center gap-1 transition-colors w-fit">
-                                            访问 <ArrowRight size={10}/>
-                                        </a>
+                                        <div className="mt-auto flex items-center justify-between">
+                                            {site.language && <span className="text-[10px] bg-slate-100 dark:bg-white/5 px-2 py-0.5 rounded text-slate-500">{site.language}</span>}
+                                            <a href={site.url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-slate-600 dark:text-slate-600 hover:text-cyan-600 dark:hover:text-cyan-400 flex items-center gap-1 transition-colors w-fit ml-auto">
+                                                访问 <ArrowRight size={10}/>
+                                            </a>
+                                        </div>
                                     </div>
                                 );
                             })}
