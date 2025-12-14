@@ -2,11 +2,13 @@
 import React from 'react';
 import { 
   LayoutGrid, Settings, Bot, Palette, Search, Terminal, 
-  LogOut, Power 
+  LogOut, Power, AppWindow, Workflow 
 } from 'lucide-react';
 import { cn } from '../../utils';
+import { useI18n } from '../../hooks/useI18n';
+import { Language } from '../../types';
 
-type SidebarTab = 'dashboard' | 'general' | 'ai' | 'appearance' | 'search' | 'diagnose';
+type SidebarTab = 'dashboard' | 'widgets' | 'automation' | 'general' | 'ai' | 'appearance' | 'search' | 'diagnose';
 type CloudSyncStatus = 'checking' | 'connected' | 'disconnected';
 
 interface SidebarProps {
@@ -15,6 +17,7 @@ interface SidebarProps {
   cloudSyncStatus: CloudSyncStatus;
   onLogout: () => void;
   onExitEdit: () => void;
+  language: Language; // Add language prop
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ 
@@ -22,15 +25,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setActiveTab, 
   cloudSyncStatus, 
   onLogout, 
-  onExitEdit 
+  onExitEdit,
+  language
 }) => {
+  const { t } = useI18n(language);
+
   const menuItems = [
-    { id: 'dashboard', label: '仪表盘 / 链接', icon: LayoutGrid },
-    { id: 'general', label: '基础设置', icon: Settings },
-    { id: 'ai', label: 'AI 服务', icon: Bot },
-    { id: 'appearance', label: '外观效果', icon: Palette },
-    { id: 'search', label: '搜索引擎', icon: Search },
-    { id: 'diagnose', label: '系统日志', icon: Terminal }
+    { id: 'dashboard', label: t('sidebar.dashboard'), icon: LayoutGrid },
+    { id: 'widgets', label: t('sidebar.widgets'), icon: AppWindow },
+    { id: 'automation', label: t('sidebar.automation'), icon: Workflow }, 
+    { id: 'general', label: t('sidebar.general'), icon: Settings },
+    { id: 'ai', label: t('sidebar.ai'), icon: Bot },
+    { id: 'appearance', label: t('sidebar.appearance'), icon: Palette },
+    { id: 'search', label: t('sidebar.search'), icon: Search },
+    { id: 'diagnose', label: t('sidebar.diagnose'), icon: Terminal }
   ];
 
   return (
@@ -40,12 +48,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <Settings size={18}/>
         </div>
         <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-purple-400">
-          管理后台
+          Admin
         </h1>
         <button 
           onClick={onExitEdit} 
           className="ml-auto p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-all" 
-          aria-label="返回主页"
+          aria-label={t('common.back')}
         >
           <Power size={20}/>
         </button>
@@ -82,16 +90,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
             "bg-slate-500"
           )}/>
           <span>
-            {cloudSyncStatus === 'connected' ? "已连接云同步" :
-             cloudSyncStatus === 'disconnected' ? "未连接数据库" :
-             "检查连接中..."}
+            {cloudSyncStatus === 'connected' ? t('sidebar.connected') :
+             cloudSyncStatus === 'disconnected' ? t('sidebar.disconnected') :
+             "Checking..."}
           </span>
         </div>
         <button 
           onClick={onLogout} 
           className="w-full flex items-center gap-2 text-red-400 hover:text-red-300 px-4 py-2 text-sm font-bold"
         >
-          <LogOut size={16}/> 退出登录
+          <LogOut size={16}/> {t('sidebar.logout')}
         </button>
       </div>
     </aside>

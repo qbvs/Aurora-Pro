@@ -1,22 +1,26 @@
 
 import React from 'react';
-import { Home, AlertCircle } from 'lucide-react';
-import { Category, SocialLink } from '../../types';
+import { Home, AlertCircle, Play } from 'lucide-react';
+import { Category, SocialLink, Workflow } from '../../types';
 import { Icon } from '../Icon';
 import { LoadingSpinner } from '../ui/LoadingSpinner';
 import { cn } from '../../utils';
+import { useI18n } from '../../hooks/useI18n';
 
 interface PublicSidebarProps {
   clock: Date;
-  greetingTime: string;
+  greetingTime: string; // Now passes key like 'morning', 'afternoon'
   dateInfo: string;
-  weatherInfo: { icon: string; text: string } | 'loading' | 'error' | null;
+  weatherInfo: { icon: string; textKey: string; temp: number } | 'loading' | 'error' | null;
   categories: Category[];
   viewCategory: string | null;
   setViewCategory: (id: string | null) => void;
   uniqueLinkCount: number;
   socialLinks: SocialLink[];
   onShowQr: (url: string) => void;
+  workflows?: Workflow[]; 
+  onExecuteWorkflow?: (wf: Workflow) => void;
+  language?: string; // Add language prop
 }
 
 const COMMON_REC_ID = 'rec-1';
@@ -31,8 +35,13 @@ export const PublicSidebar: React.FC<PublicSidebarProps> = ({
   setViewCategory,
   uniqueLinkCount,
   socialLinks,
-  onShowQr
+  onShowQr,
+  workflows,
+  onExecuteWorkflow,
+  language
 }) => {
+  const { t } = useI18n(language as any);
+
   return (
       <aside className="hidden lg:flex w-64 shrink-0 flex-col pb-10 sticky top-28 h-[calc(100vh-140px)]">
           <div className="mb-8 p-6 rounded-3xl bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/5 shadow-xl dark:shadow-lg relative overflow-hidden group">
@@ -47,8 +56,9 @@ export const PublicSidebar: React.FC<PublicSidebarProps> = ({
                   </div>
                 </div>
 
+                {/* 动态翻译问候语 */}
                 <div className="mt-4 text-lg font-medium text-cyan-600 dark:text-cyan-400">
-                  {greetingTime}好
+                  {t(`greeting.${greetingTime}`)}
                 </div>
 
                 <div className="mt-2 flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
@@ -58,13 +68,13 @@ export const PublicSidebar: React.FC<PublicSidebarProps> = ({
                         <div className="flex items-center gap-1.5">
                             {(() => {
                                 if (weatherInfo === 'loading') {
-                                    return <><LoadingSpinner /> <span className="text-xs">加载天气...</span></>;
+                                    return <><LoadingSpinner /> <span className="text-xs">{t('sidebar.weather_loading')}</span></>;
                                 }
                                 if (weatherInfo === 'error') {
-                                    return <><AlertCircle size={16} className="text-amber-500 dark:text-amber-400"/> <span className="text-xs">获取失败</span></>;
+                                    return <><AlertCircle size={16} className="text-amber-500 dark:text-amber-400"/> <span className="text-xs">{t('sidebar.weather_error')}</span></>;
                                 }
                                 if (typeof weatherInfo === 'object') {
-                                    return <><Icon name={weatherInfo.icon} size={16} /> <span>{weatherInfo.text}</span></>;
+                                    return <><Icon name={weatherInfo.icon} size={16} /> <span>{t(weatherInfo.textKey)} {weatherInfo.temp}°C</span></>;
                                 }
                                 return null;
                             })()}
@@ -84,12 +94,31 @@ export const PublicSidebar: React.FC<PublicSidebarProps> = ({
                   )}
               >
                   <div className={cn("transition-transform group-hover:scale-110 duration-200", !viewCategory ? "text-cyan-600 dark:text-cyan-400" : "text-slate-400 dark:text-slate-500")}><Home size={20}/></div>
-                  <span className="flex-1 text-left">总览</span>
+                  <span className="flex-1 text-left">{t('sidebar.overview')}</span>
                   <span className={cn("text-[10px] px-1.5 py-0.5 rounded-md font-mono", !viewCategory ? "bg-white/20 text-current" : "bg-slate-100 dark:bg-white/5 text-slate-400")}>{uniqueLinkCount}</span>
                   {!viewCategory && <div className="absolute right-0 top-0 bottom-0 w-1 bg-cyan-500 dark:bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.8)]"/>}
               </button>
 
               <div className="my-4 h-px bg-gradient-to-r from-transparent via-slate-200 dark:via-slate-800 to-transparent opacity-50"/>
+
+              {/* 工作流区域 */}
+              {workflows && workflows.length > 0 && (
+                  <div className="mb-4 space-y-1">
+                      <div className="px-5 text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider">{t('sidebar.quick_actions')}</div>
+                      {workflows.map(wf => (
+                          <button 
+                              key={wf.id}
+                              onClick={() => onExecuteWorkflow?.(wf)}
+                              className="w-full flex items-center gap-4 px-5 py-2.5 rounded-2xl text-sm font-medium text-slate-500 dark:text-slate-400 hover:bg-white/50 dark:hover:bg-white/5 hover:text-purple-600 dark:hover:text-purple-400 transition-all group"
+                          >
+                               <div className="text-slate-400 group-hover:text-purple-500 transition-colors"><Icon name={wf.icon} size={18}/></div>
+                               <span className="flex-1 text-left">{wf.name}</span>
+                               <Play size={12} className="opacity-0 group-hover:opacity-100 transition-opacity"/>
+                          </button>
+                      ))}
+                      <div className="my-4 h-px bg-gradient-to-r from-transparent via-slate-200 dark:via-slate-800 to-transparent opacity-50"/>
+                  </div>
+              )}
 
               {(categories || []).map(cat => (
                   <button key={cat.id} onClick={() => setViewCategory(cat.id)} className={cn("w-full flex items-center gap-4 px-5 py-3.5 rounded-2xl transition-all text-sm font-medium group relative", 

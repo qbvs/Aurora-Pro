@@ -1,0 +1,81 @@
+
+export const zh = {
+  common: {
+    loading: '加载中...',
+    confirm: '确认',
+    cancel: '取消',
+    save: '保存',
+    delete: '删除',
+    edit: '编辑',
+    search: '搜索',
+    back: '返回',
+    export: '导出',
+    import: '导入',
+    install: '安装应用',
+  },
+  header: {
+    greeting: '{{time}}好',
+    searchPlaceholder: '搜索网络或执行命令 (Cmd+K)...',
+    online: '在线',
+    collected: '收录',
+  },
+  sidebar: {
+    dashboard: '链接管理',
+    widgets: '小部件',
+    automation: '自动化',
+    general: '基础设置',
+    ai: 'AI 服务',
+    appearance: '外观效果',
+    search: '搜索引擎',
+    diagnose: '系统日志',
+    logout: '退出登录',
+    connected: '已连接云同步',
+    disconnected: '未连接数据库',
+    overview: '总览',
+    quick_actions: '快捷指令',
+    view_all: '查看全部',
+    weather_loading: '加载天气...',
+    weather_error: '获取失败'
+  },
+  settings: {
+    title_general: '基础设置',
+    title_appearance: '外观效果',
+    site_title: '网站标题',
+    site_icon: '网站图标 (Lucide)',
+    logo_mode: 'Logo 模式',
+    bg_style: '背景风格',
+    bg_upload: '上传背景图',
+    theme_market: '主题市场',
+    theme_export_desc: '分享你的配置或备份视觉风格。',
+    language: '界面语言',
+    card_opacity: '卡片透明度',
+    bg_blur: '背景模糊度',
+    ai_greeting: 'AI 每日寄语',
+  },
+  cmd: {
+    placeholder: '输入命令搜索网站、执行动作...',
+    section_links: '链接',
+    section_actions: '动作',
+    section_system: '系统',
+    action_theme: '切换主题',
+    action_admin: '进入后台',
+    action_login: '管理员登录',
+    no_results: '未找到相关结果',
+  },
+  // 新增部分
+  greeting: {
+      early: '凌晨好',
+      morning: '早上好',
+      afternoon: '下午好',
+      evening: '晚上好'
+  },
+  weather: {
+      sunny: '晴',
+      cloudy: '多云',
+      fog: '雾',
+      rain: '雨',
+      snow: '雪',
+      thunder: '雷暴',
+      unknown: '未知'
+  }
+};

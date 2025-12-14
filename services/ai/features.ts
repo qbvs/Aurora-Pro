@@ -1,6 +1,6 @@
 
 import { GoogleGenAI } from "@google/genai";
-import { AIResponse, LinkItem } from "../../types";
+import { AIResponse, LinkItem, Language } from "../../types";
 import { addLog } from "../logger";
 import { getActiveConfig, fetchOpenAI, cleanJsonString } from "./core";
 
@@ -44,26 +44,40 @@ export const analyzeUrl = async (url: string): Promise<AIResponse> => {
 
 /**
  * 业务功能：生成每日寄语
- * 意图：生成富有哲理的中文短句
+ * 意图：生成富有哲理的短句 (支持多语言)
  */
-export const getAiGreeting = async (): Promise<string> => {
+export const getAiGreeting = async (lang: Language = 'zh'): Promise<string> => {
   const config = getActiveConfig();
   if (!config.apiKey) return "";
   
-  const prompt = `生成一句富有哲理的简体中文短语，20-60字。优美、凝练。不要包含引号。`;
+  let prompt = "";
+  if (lang === 'en') {
+      prompt = "Generate a short, poetic, and philosophical quote in English (10-20 words). Do NOT use quotes.";
+  } else if (lang === 'ja') {
+      prompt = "哲学的で詩的な短い日本語のフレーズを生成してください（20〜40文字）。引用符は使用しないでください。";
+  } else {
+      prompt = "生成一句富有哲理的简体中文短语，20-60字。优美、凝练。不要包含引号。";
+  }
 
   try {
+     let text = "";
      if (config.type === 'google') {
         const ai = new GoogleGenAI({ apiKey: config.apiKey });
         const res = await ai.models.generateContent({ 
             model: config.model || 'gemini-2.5-flash', 
             contents: prompt 
         });
-        return (res.text?.trim() || "").replace(/[^\u4e00-\u9fa5，。？！；：]/g, '');
+        text = res.text?.trim() || "";
      } else {
-        const text = await fetchOpenAI(config, [{ role: "user", content: prompt }], '每日寄语');
-        return text.replace(/[^\u4e00-\u9fa5，。？！；：]/g, '').trim();
+        text = await fetchOpenAI(config, [{ role: "user", content: prompt }], '每日寄语');
      }
+     
+     // 简单的清理
+     if (lang === 'zh' || lang === 'ja') {
+         return text.replace(/[^\u4e00-\u9fa5\u3040-\u309F\u30A0-\u30FF，。？！；：]/g, '').trim();
+     }
+     return text.replace(/["']/g, "").trim();
+
   } catch { return ""; }
 };
 
@@ -90,7 +104,6 @@ export const generateCategoryLinks = async (title: string, count: number, exclud
 };
 
 // ... 其他简单函数如 askSimpleQuestion, suggestIcon, testAiConnection 也可以放在这里
-// 为了节省篇幅，假设它们已类似实现
-export const suggestIcon = async (text: string): Promise<string> => { return "Folder"; }; // Placeholder implementation for brevity
+export const suggestIcon = async (text: string): Promise<string> => { return "Folder"; }; 
 export const askSimpleQuestion = async (q: string): Promise<string> => { return "AI 正在思考..."; };
 export const testAiConnection = async (c: any) => { return { success: true, message: 'OK' }; };

@@ -1,5 +1,4 @@
-
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AppSettings, SearchEngine } from '../types';
 import { INITIAL_SETTINGS, INITIAL_SEARCH_ENGINES } from '../constants';
 import { 

@@ -1,25 +1,29 @@
 
+import React from 'react';
 import { useCoreData } from './useCoreData';
 import { useAppSettings } from './useAppSettings';
 import { useAuth } from './useAuth';
 import { useAI } from './useAI';
 import { useSystem } from './useSystem';
 import { useUIState } from './useUIState';
+import { Workflow } from '../types';
 
 // This is the "Aggregator" pattern. 
 // It keeps the implementation details separated but the interface unified.
 export const useAppController = () => {
   // 1. Initialize atomic hooks
   const ui = useUIState();
-  const system = useSystem();
   const auth = useAuth();
   const settings = useAppSettings();
   const core = useCoreData();
   
-  // 2. AI hook needs data from settings and core
-  const ai = useAI(core.categories, settings.settings.enableAiGreeting);
+  // 2. System hook needs language for formatting
+  const system = useSystem(settings.settings.language);
+  
+  // 3. AI hook needs data from settings and core
+  const ai = useAI(core.categories, settings.settings.enableAiGreeting, settings.settings.language);
 
-  // 3. Compose complex actions that span multiple domains
+  // 4. Compose complex actions that span multiple domains
   
   // Wrappers to connect UI interactions with Data Logic
   const handleDropWrapper = (e: React.DragEvent, targetCatId: string, targetIndex: number) => {
@@ -75,6 +79,60 @@ export const useAppController = () => {
       ui.addToast('info', `切换到${newTheme === 'dark' ? '深色' : '浅色'}模式`);
   };
 
+  // Helper for Widgets data persistence (e.g. Todos)
+  const handleUpdateWidgetData = (id: string, data: any) => {
+      const newWidgets = settings.settings.widgets.map(w => w.id === id ? { ...w, data } : w);
+      settings.handleUpdateSettings({ ...settings.settings, widgets: newWidgets });
+  };
+
+  // Workflow Execution Engine
+  const handleExecuteWorkflow = async (wf: Workflow) => {
+      ui.addToast('info', `正在执行: ${wf.name}`);
+      
+      const currentBlockedUrls: string[] = [];
+
+      for (const action of wf.actions) {
+          // Handle Delay
+          if (action.delay && action.delay > 0) {
+              await new Promise(r => setTimeout(r, action.delay));
+          }
+
+          try {
+              if (action.type === 'open_url') {
+                  let url = action.value?.trim();
+                  if (url) {
+                      // Fix: 自动补全协议前缀
+                      if (!/^https?:\/\//i.test(url)) {
+                          url = 'https://' + url;
+                      }
+                      
+                      const newWindow = window.open(url, '_blank');
+                      
+                      // Fix: 收集被拦截的链接
+                      // 浏览器通常只允许在一次点击中打开一个标签页。
+                      if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') {
+                          currentBlockedUrls.push(url);
+                      }
+                  }
+              } else if (action.type === 'copy_text') {
+                  if (action.value) {
+                      await navigator.clipboard.writeText(action.value);
+                      ui.addToast('success', '文本已复制');
+                  }
+              }
+          } catch (e) {
+              console.error(e);
+              ui.addToast('error', `动作执行失败: ${action.type}`);
+          }
+      }
+
+      // 如果有被拦截的链接，设置状态以触发弹窗
+      if (currentBlockedUrls.length > 0) {
+          ui.setBlockedUrls(currentBlockedUrls);
+          ui.addToast('warn', '部分页面被浏览器拦截，请在弹窗中手动打开');
+      }
+  };
+
   // 4. Return the massive object expected by views
   return {
     // UI State
@@ -92,6 +150,8 @@ export const useAppController = () => {
     ...settings,
     handleFileUpload: handleFileUploadWrapper,
     toggleTheme: toggleThemeWrapper,
+    handleUpdateWidgetData, 
+    handleExecuteWorkflow, // Exported
 
     // Core Data State
     ...core,

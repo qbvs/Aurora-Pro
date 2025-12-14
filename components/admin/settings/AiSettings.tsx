@@ -9,7 +9,7 @@ import { testAiConnection } from '../../../services/geminiService';
 interface AiSettingsProps {
   settings: AppSettings;
   onUpdateSettings: (settings: AppSettings) => void;
-  addToast: (type: 'success' | 'error' | 'info', msg: string) => void;
+  addToast: (type: 'success' | 'error' | 'info' | 'warn', msg: string) => void;
 }
 
 export const AiSettings: React.FC<AiSettingsProps> = ({ settings, onUpdateSettings, addToast }) => {

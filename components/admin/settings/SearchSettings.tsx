@@ -11,7 +11,7 @@ interface SearchSettingsProps {
   searchEngines: SearchEngine[];
   onUpdateSettings: (s: AppSettings) => void;
   onUpdateEngines: (e: SearchEngine[]) => void;
-  addToast: (type: 'success' | 'error' | 'info', msg: string) => void;
+  addToast: (type: 'success' | 'error' | 'info' | 'warn', msg: string) => void;
 }
 
 export const SearchSettings: React.FC<SearchSettingsProps> = ({ 

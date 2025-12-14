@@ -1,10 +1,12 @@
 
 import React from 'react';
-import { Search, Sun, Moon, Settings, Menu } from 'lucide-react';
+import { Search, Sun, Moon, Settings, Menu, Download } from 'lucide-react';
 import { AppSettings, SearchEngine } from '../../types';
 import { Icon } from '../Icon';
 import { Favicon } from '../Favicon';
 import { cn } from '../../utils';
+import { usePWA } from '../../hooks/usePWA';
+import { useI18n } from '../../hooks/useI18n';
 
 interface HeaderProps {
   settings: AppSettings;
@@ -33,6 +35,9 @@ export const Header: React.FC<HeaderProps> = ({
   onEnterEditMode,
   uniqueLinkCount
 }) => {
+  const { isInstallable, installPWA } = usePWA();
+  const { t } = useI18n(settings.language);
+  
   const activeEngine = searchEngines?.find(e => e.id === settings.activeSearchEngineId) 
     || searchEngines?.[0] 
     || { id: 'fallback', name: 'Google', baseUrl: 'https://google.com', searchUrlPattern: 'https://google.com/search?q=' };
@@ -52,7 +57,7 @@ export const Header: React.FC<HeaderProps> = ({
             <h1 className="text-sm font-bold tracking-tight text-slate-900 dark:text-white">{settings.appName}</h1>
             <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium tracking-wide uppercase flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 dark:bg-cyan-400 animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.5)] dark:shadow-[0_0_10px_rgba(34,211,238,0.5)]"/> 
-              在线 <span className="opacity-50">|</span> 收录 {uniqueLinkCount}
+              {t('header.online')} <span className="opacity-50">|</span> {t('header.collected')} {uniqueLinkCount}
             </p>
           </div>
         </div>
@@ -74,7 +79,7 @@ export const Header: React.FC<HeaderProps> = ({
             }
           }} 
           className="w-full h-11 pl-12 pr-4 rounded-2xl bg-slate-100/50 dark:bg-white/5 border border-slate-200/50 dark:border-white/5 focus:bg-white dark:focus:bg-slate-900/80 focus:border-cyan-500/30 dark:focus:border-cyan-500/50 shadow-inner focus:shadow-lg focus:shadow-cyan-500/10 outline-none text-sm font-medium transition-all text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500 backdrop-blur-md" 
-          placeholder={`使用 ${activeEngine?.name} 搜索...`}
+          placeholder={t('header.searchPlaceholder')}
         />
         <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 pr-1">
           {(searchEngines || []).slice(0, 3).map(engine => (
@@ -95,6 +100,16 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       <div className="flex items-center gap-2">
+        {isInstallable && (
+            <button 
+                onClick={installPWA}
+                className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold bg-cyan-600 text-white shadow-lg shadow-cyan-500/20 hover:bg-cyan-500 hover:scale-105 active:scale-95 transition-all mr-2 animate-fade-in"
+                title={t('common.install')}
+            >
+                <Download size={14} /> {t('common.install')}
+            </button>
+        )}
+
         <button onClick={toggleTheme} className="p-2.5 rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-amber-500 dark:hover:text-yellow-300 transition-all border border-transparent hover:border-slate-200 dark:hover:border-white/5" aria-label="切换主题">
           {isDark ? <Sun size={20}/> : <Moon size={20}/>}
         </button>

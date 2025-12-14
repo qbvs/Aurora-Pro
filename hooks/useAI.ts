@@ -1,29 +1,34 @@
 
 import { useState, useEffect } from 'react';
 import { generateCategoryLinks, getAiGreeting } from '../services/geminiService';
-import { Category } from '../types';
+import { Category, Language } from '../types';
 
-export const useAI = (categories: Category[], enableGreeting: boolean) => {
+export const useAI = (categories: Category[], enableGreeting: boolean, language: Language) => {
   const [aiGreeting, setAiGreeting] = useState<string>('');
 
   useEffect(() => {
       if (!enableGreeting) return;
-      const cached = localStorage.getItem('aurora_greeting_v7'); 
+      // 缓存键增加语言后缀，避免切换语言后显示旧缓存
+      const cacheKey = `aurora_greeting_v7_${language}`;
+      const cached = localStorage.getItem(cacheKey); 
       if (cached) {
           const { text, expiry } = JSON.parse(cached);
           if (Date.now() < expiry) { setAiGreeting(text); return; }
       }
-      getAiGreeting().then(text => {
+      getAiGreeting(language).then(text => {
           if (text) {
               setAiGreeting(text);
-              localStorage.setItem('aurora_greeting_v7', JSON.stringify({ text, expiry: Date.now() + 14400000 }));
+              localStorage.setItem(cacheKey, JSON.stringify({ text, expiry: Date.now() + 14400000 }));
           }
       });
-  }, [enableGreeting]);
+  }, [enableGreeting, language]);
 
   const handleAiRefreshGreeting = async () => {
-      const text = await getAiGreeting();
-      if (text) localStorage.setItem('aurora_greeting_v7', JSON.stringify({ text, expiry: Date.now() + 14400000 }));
+      const text = await getAiGreeting(language);
+      if (text) {
+          const cacheKey = `aurora_greeting_v7_${language}`;
+          localStorage.setItem(cacheKey, JSON.stringify({ text, expiry: Date.now() + 14400000 }));
+      }
       return text;
   };
 

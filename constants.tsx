@@ -1,4 +1,3 @@
-
 import { Category, AppSettings, SearchEngine, AIProviderConfig } from './types';
 
 export const INITIAL_SEARCH_ENGINES: SearchEngine[] = [
@@ -43,33 +42,13 @@ const DEFAULT_AI_CONFIGS: AIProviderConfig[] = [
     isActive: false
   },
   {
-    id: 'ai-mistral',
-    name: 'Mistral',
+    id: 'ai-deepseek',
+    name: 'DeepSeek',
     type: 'openai',
-    baseUrl: 'https://api.mistral.ai/v1',
+    baseUrl: 'https://api.deepseek.com',
     apiKey: '',
     envSlot: 'CUSTOM_API_KEY_2',
-    model: 'pixtral-12b-2409',
-    isActive: false
-  },
-  {
-    id: 'ai-aliyun',
-    name: '阿里云百炼',
-    type: 'openai',
-    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-    apiKey: '',
-    envSlot: 'CUSTOM_API_KEY_3',
-    model: 'qwen-vl-plus',
-    isActive: false
-  },
-  {
-    id: 'ai-siliconflow',
-    name: '硅基流动 (DeepSeek)',
-    type: 'openai',
-    baseUrl: 'https://api.siliconflow.cn/v1',
-    apiKey: '',
-    envSlot: 'CUSTOM_API_KEY_4',
-    model: 'deepseek-ai/DeepSeek-R1',
+    model: 'deepseek-chat',
     isActive: false
   }
 ];
@@ -79,14 +58,19 @@ export const INITIAL_SETTINGS: AppSettings = {
   appIcon: 'Zap',
   logoMode: 'icon',
   theme: 'system',
+  language: 'zh',
   openInNewTab: true,
   activeSearchEngineId: 'se-google',
   aiConfigs: DEFAULT_AI_CONFIGS,
+  enableAiGreeting: true,
+  enableAiSummary: false,
   cardOpacity: 80,
   backgroundMode: 'aurora',
   backgroundBlur: 0,
   backgroundMaskOpacity: 0,
-  enableAiGreeting: true,
+  layoutMode: 'standard',
+  widgets: [], // 初始化为空，后续添加默认小部件
+  workflows: [], // 初始化为空
   footerHtml: '© 2024 极光 Pro 导航. 为极客设计.',
   socialLinks: [
       { id: 'sl-1', platform: 'GitHub', url: 'https://github.com', icon: 'Github' },
@@ -107,6 +91,7 @@ export const INITIAL_DATA: Category[] = [
         description: '代码托管平台',
         color: '#181717',
         clickCount: 10,
+        size: 'medium', // 测试新的 size 属性
         pros: '开源社区',
         cons: '门槛较高'
       },
@@ -163,29 +148,6 @@ export const INITIAL_DATA: Category[] = [
         color: '#38B2AC',
         clickCount: 1
       },
-      {
-        id: 'l-7',
-        title: 'React Docs',
-        url: 'https://react.dev',
-        description: 'React 官方文档',
-        color: '#61DAFB',
-        clickCount: 0
-      },
     ],
-  },
-  {
-    id: 'design-1',
-    title: '设计灵感',
-    icon: 'Palette',
-    links: [
-        {
-            id: 'l-8',
-            title: 'Dribbble',
-            url: 'https://dribbble.com',
-            description: '设计作品分享',
-            color: '#EA4C89',
-            clickCount: 0
-        }
-    ]
   }
 ];

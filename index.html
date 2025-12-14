@@ -1,8 +1,15 @@
+
 <!DOCTYPE html>
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#0f172a" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Aurora Pro" />
+    <link rel="apple-touch-icon" href="/pwa-192x192.png" />
+    
     <title>Aurora Pro - 个人灵感导航</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -80,13 +87,15 @@
       body { 
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
         -webkit-font-smoothing: antialiased;
+        /* 针对 iOS PWA 的底部安全区适配 */
+        padding-bottom: env(safe-area-inset-bottom);
       }
       .custom-scrollbar::-webkit-scrollbar {
-        display: none; /* For Webkit browsers */
+        display: none;
       }
       .custom-scrollbar {
-        -ms-overflow-style: none;  /* For IE and Edge */
-        scrollbar-width: none;  /* For Firefox */
+        -ms-overflow-style: none;
+        scrollbar-width: none;
       }
     </style>
 <script type="importmap">
@@ -101,12 +110,13 @@
     "tailwind-merge": "https://esm.sh/tailwind-merge@^3.4.0",
     "vite": "https://esm.sh/vite@^7.2.7",
     "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
-    "path": "https://esm.sh/path@^0.12.7"
+    "path": "https://esm.sh/path@^0.12.7",
+    "vite-plugin-pwa": "https://esm.sh/vite-plugin-pwa@^1.2.0"
   }
 }
 </script>
 </head>
-  <body class="bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 transition-colors duration-500 ease-in-out selection:bg-primary-500/30 selection:text-primary-900">
+  <body class="bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 transition-colors duration-500 ease-in-out selection:bg-primary-500/30 selection:text-primary-900 overflow-x-hidden">
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
   </body>

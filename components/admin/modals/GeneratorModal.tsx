@@ -13,7 +13,7 @@ interface GeneratorModalProps {
   category: { id: string, title: string } | null;
   categories: Category[];
   onSave: (newLinks: LinkItem[], catId: string) => void;
-  addToast: (type: 'success' | 'error' | 'info', msg: string) => void;
+  addToast: (type: 'success' | 'error' | 'info' | 'warn', msg: string) => void;
 }
 
 export const GeneratorModal: React.FC<GeneratorModalProps> = ({ isOpen, onClose, category, categories, onSave, addToast }) => {
