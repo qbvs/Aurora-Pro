@@ -923,6 +923,12 @@ export const App: React.FC = () => {
         ? categories.filter(c => c.id === viewCategory)
         : categories;
 
+    // Calculate total unique links (excluding common rec duplicates if any, though Set handles unique URLs)
+    const uniqueLinkCount = new Set(
+        categories
+            .flatMap(c => c.links.map(l => l.url))
+    ).size;
+
     // Enhanced Aurora Gradients for both Light and Dark modes
     const deepAuroraGradient = settings.backgroundMode === 'aurora' ? (
         <div className="fixed inset-0 overflow-hidden -z-20 pointer-events-none select-none transition-colors duration-1000 ease-in-out bg-slate-50 dark:bg-[#020617]">
@@ -969,7 +975,7 @@ export const App: React.FC = () => {
                          <h1 className="text-sm font-bold tracking-tight text-slate-900 dark:text-white">{settings.appName}</h1>
                          <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium tracking-wide uppercase flex items-center gap-1">
                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 dark:bg-cyan-400 animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.5)] dark:shadow-[0_0_10px_rgba(34,211,238,0.5)]"/> 
-                             在线
+                             在线 <span className="opacity-50">|</span> 收录 {uniqueLinkCount}
                          </p>
                      </div>
                  </div>
@@ -1011,7 +1017,7 @@ export const App: React.FC = () => {
               <aside className="hidden lg:flex w-64 shrink-0 flex-col pb-10 sticky top-28 h-[calc(100vh-140px)]">
                   <div className="mb-8 p-6 rounded-3xl bg-white/60 dark:bg-white/5 backdrop-blur-md border border-white/40 dark:border-white/5 shadow-xl dark:shadow-lg relative overflow-hidden group">
                       <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/5 to-purple-500/5 dark:from-cyan-500/10 dark:to-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-                      <div className="relative z-10 flex flex-col items-center justify-center text-center">
+                      <div className="relative z-10 flex flex-col items-center justify-center text-center select-none cursor-default">
                         {/* Time Display */}
                         <div className="flex items-baseline">
                           <div className="text-5xl font-bold text-slate-800 dark:text-white tracking-tight">
@@ -1061,8 +1067,9 @@ export const App: React.FC = () => {
                           )}
                       >
                           <div className={cn("transition-transform group-hover:scale-110 duration-200", !viewCategory ? "text-cyan-600 dark:text-cyan-400" : "text-slate-400 dark:text-slate-500")}><Home size={20}/></div>
-                          <span>总览</span>
-                          {!viewCategory && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-cyan-500 dark:bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.8)]"/>}
+                          <span className="flex-1 text-left">总览</span>
+                          <span className={cn("text-[10px] px-1.5 py-0.5 rounded-md font-mono", !viewCategory ? "bg-white/20 text-current" : "bg-slate-100 dark:bg-white/5 text-slate-400")}>{uniqueLinkCount}</span>
+                          {!viewCategory && <div className="absolute right-0 top-0 bottom-0 w-1 bg-cyan-500 dark:bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.8)]"/>}
                       </button>
 
                       <div className="my-4 h-px bg-gradient-to-r from-transparent via-slate-200 dark:via-slate-800 to-transparent opacity-50"/>
@@ -1074,7 +1081,8 @@ export const App: React.FC = () => {
                                 : "text-slate-500 dark:text-slate-400 hover:bg-white/50 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white"
                           )}>
                               <div className={cn("transition-transform group-hover:scale-110 duration-200", viewCategory === cat.id ? "text-cyan-600 dark:text-cyan-400" : cat.id === COMMON_REC_ID ? "text-orange-500 dark:text-orange-400" : "text-slate-400 dark:text-slate-500")}><Icon name={cat.icon} size={18}/></div>
-                              <span>{cat.title}</span>
+                              <span className="flex-1 truncate text-left">{cat.title}</span>
+                              <span className={cn("text-[10px] px-1.5 py-0.5 rounded-md font-mono transition-colors", viewCategory === cat.id ? "bg-white/20 text-current" : "bg-slate-100 dark:bg-white/5 text-slate-400")}>{cat.links.length}</span>
                           </button>
                       ))}
                   </nav>
@@ -1121,13 +1129,13 @@ export const App: React.FC = () => {
                     className="flex-1 overflow-y-auto custom-scrollbar px-2 pb-20 scroll-smooth"
                     onScroll={handleContentScroll}
                   >
-                      <div className="space-y-10 pb-10">
+                      <div className="space-y-10 pb-32">
                           {visibleCategories.map(cat => {
                               const isFocusMode = !!viewCategory;
                               const isCommon = cat.id === COMMON_REC_ID;
                               const showAllLinks = isFocusMode || isCommon;
-                              const displayLinks = showAllLinks ? cat.links : cat.links.slice(0, 2);
-                              const hasMore = !showAllLinks && cat.links.length > 2;
+                              const displayLinks = showAllLinks ? cat.links : cat.links.slice(0, 3);
+                              const hasMore = !showAllLinks && cat.links.length > 3;
 
                               return (
                                   <section key={cat.id} id={cat.id} className="scroll-mt-36 animate-fade-in-up">
@@ -1139,9 +1147,12 @@ export const App: React.FC = () => {
                                           )}>
                                               <Icon name={cat.icon} size={22}/>
                                           </div>
-                                          <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">{cat.title}</h2>
+                                          <div className="flex items-baseline gap-3">
+                                              <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">{cat.title}</h2>
+                                              <span className="text-xs font-mono font-medium text-slate-400 dark:text-slate-600">{cat.links.length}</span>
+                                          </div>
                                           {!isCommon && !viewCategory && (
-                                              <div className="opacity-0 group-hover:opacity-100 transition-opacity transform translate-x-[-10px] group-hover:translate-x-0 duration-300 text-cyan-600 dark:text-cyan-400">
+                                              <div className="opacity-0 group-hover:opacity-100 transition-opacity transform translate-x-[-10px] group-hover:translate-x-0 duration-300 text-cyan-600 dark:text-cyan-400 ml-auto">
                                                   <ChevronRight size={18}/>
                                               </div>
                                           )}
