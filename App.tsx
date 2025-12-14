@@ -110,6 +110,7 @@ export const App: React.FC = () => {
   const [viewCategory, setViewCategory] = useState<string | null>(null); // Controls Focus Mode
   const [clickedLinkId, setClickedLinkId] = useState<string | null>(null); // For click animation
   const [isDark, setIsDark] = useState(true); // Internal state for easier rendering logic
+  const [draggedItem, setDraggedItem] = useState<{ catId: string; index: number } | null>(null); // Dragging State
 
   // -- Inputs --
   const [searchTerm, setSearchTerm] = useState('');
@@ -302,8 +303,6 @@ export const App: React.FC = () => {
   }, [settings.theme]);
 
   const toggleTheme = () => {
-      // FIX: The toggle logic should be based on the current visual state (isDark),
-      // not the settings.theme, to correctly override 'system' preference.
       const newTheme: AppSettings['theme'] = isDark ? 'light' : 'dark';
       const n = { ...settings, theme: newTheme };
       setLocalSettings(n);
@@ -311,7 +310,6 @@ export const App: React.FC = () => {
       addToast('info', `切换到${newTheme === 'dark' ? '深色' : '浅色'}模式`);
   };
 
-  // Fix: Only update source type when the modal *opens* (new ID), not on every edit to `editingAiConfig`
   useEffect(() => { 
     if (editingAiConfig) { 
         setAiKeySource(editingAiConfig.envSlot ? 'env' : 'manual'); 
@@ -334,6 +332,59 @@ export const App: React.FC = () => {
       });
   }, [settings.enableAiGreeting]);
 
+  // --- Drag & Drop Handlers ---
+  const handleDragStart = (e: React.DragEvent, catId: string, index: number) => {
+      setDraggedItem({ catId, index });
+      e.dataTransfer.effectAllowed = "move";
+      // Firefox requires setData to be set for drag to work properly
+      e.dataTransfer.setData("text/plain", `${catId}:${index}`);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+      e.preventDefault(); 
+      e.dataTransfer.dropEffect = "move";
+  };
+
+  const handleDrop = (e: React.DragEvent, targetCatId: string, targetIndex: number) => {
+      e.preventDefault();
+      if (!draggedItem) return;
+      
+      // If dropping onto self, do nothing
+      if (draggedItem.catId === targetCatId && draggedItem.index === targetIndex) {
+          setDraggedItem(null);
+          return;
+      }
+
+      const newCats = [...categories];
+      
+      const sourceCatIndex = newCats.findIndex(c => c.id === draggedItem.catId);
+      const targetCatIndex = newCats.findIndex(c => c.id === targetCatId);
+      
+      if (sourceCatIndex === -1 || targetCatIndex === -1) {
+          setDraggedItem(null);
+          return;
+      }
+
+      // Clone links arrays
+      const sourceLinks = [...newCats[sourceCatIndex].links];
+      const targetLinks = sourceCatIndex === targetCatIndex ? sourceLinks : [...newCats[targetCatIndex].links];
+      
+      // Remove from source
+      const [movedItem] = sourceLinks.splice(draggedItem.index, 1);
+      
+      // Insert into target
+      targetLinks.splice(targetIndex, 0, movedItem);
+      
+      // Update categories structure
+      newCats[sourceCatIndex].links = sourceLinks;
+      if (sourceCatIndex !== targetCatIndex) {
+          newCats[targetCatIndex].links = targetLinks;
+      }
+      
+      handleSaveData(newCats);
+      setDraggedItem(null);
+  };
+
   const handleSaveData = async (newCats: Category[]) => {
       const updated = updateCommonRecommendations(newCats);
       setCategories(updated);
@@ -341,13 +392,8 @@ export const App: React.FC = () => {
   };
   
   const handleLinkClick = async (category: Category, link: LinkItem) => {
-      setClickedLinkId(link.id); // Trigger animation
-      
-      // Delay opening slightly to show animation if desired, or open immediately.
-      // Since window.open might be blocked if not direct, we usually do it immediately.
-      // But for visual feedback, the animation runs concurrently.
-      setTimeout(() => setClickedLinkId(null), 350); // Reset after animation duration
-
+      setClickedLinkId(link.id); 
+      setTimeout(() => setClickedLinkId(null), 350); 
       window.open(link.url, settings.openInNewTab ? '_blank' : '_self');
       const newCats = categories.map(cat => {
           if (cat.id === COMMON_REC_ID) return cat;
@@ -633,9 +679,31 @@ export const App: React.FC = () => {
                           </div>
                       )}
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                      {category.links.map(link => (
-                          <div key={link.id} className="group relative p-4 rounded-xl border flex items-start gap-3 bg-slate-950 border-slate-800 hover:border-cyan-500/30 hover:shadow-lg hover:shadow-cyan-900/10 transition-all">
+                  <div 
+                    className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4"
+                    onDragOver={handleDragOver}
+                    onDrop={(e) => {
+                        e.preventDefault();
+                        if (category.id !== COMMON_REC_ID && draggedItem) {
+                            handleDrop(e, category.id, category.links.length);
+                        }
+                    }}
+                  >
+                      {category.links.map((link, linkIndex) => (
+                          <div 
+                            key={link.id} 
+                            draggable={category.id !== COMMON_REC_ID}
+                            onDragStart={(e) => handleDragStart(e, category.id, linkIndex)}
+                            onDragOver={handleDragOver}
+                            onDrop={(e) => {
+                                e.stopPropagation(); // Prevent bubble to grid
+                                handleDrop(e, category.id, linkIndex);
+                            }}
+                            className={cn(
+                                "group relative p-4 rounded-xl border flex items-start gap-3 bg-slate-950 border-slate-800 hover:border-cyan-500/30 hover:shadow-lg hover:shadow-cyan-900/10 transition-all cursor-move",
+                                draggedItem?.catId === category.id && draggedItem?.index === linkIndex ? "opacity-30 border-dashed border-cyan-500" : ""
+                            )}
+                          >
                               <Favicon url={link.url} size={32} className="rounded-lg shadow-sm" onLoadError={() => setBrokenLinks(p => new Set(p).add(link.id))}/>
                               <div className="flex-1 min-w-0">
                                   <div className="font-bold text-sm truncate text-slate-200">{link.title}</div>
@@ -1051,10 +1119,27 @@ export const App: React.FC = () => {
                                       )}
                                   </div>
                                   
-                                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
-                                      {displayLinks.map(link => (
+                                  <div 
+                                      className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5"
+                                      onDragOver={handleDragOver}
+                                      onDrop={(e) => {
+                                          e.preventDefault();
+                                          if (!isCommon && draggedItem && draggedItem.catId) {
+                                              // If dropped on empty space in grid, append to end
+                                              handleDrop(e, cat.id, cat.links.length);
+                                          }
+                                      }}
+                                  >
+                                      {displayLinks.map((link, linkIndex) => (
                                           <div 
                                             key={link.id} 
+                                            draggable={!isCommon}
+                                            onDragStart={(e) => handleDragStart(e, cat.id, linkIndex)}
+                                            onDragOver={handleDragOver}
+                                            onDrop={(e) => {
+                                                e.stopPropagation();
+                                                handleDrop(e, cat.id, linkIndex);
+                                            }}
                                             onClick={() => handleLinkClick(cat, link)} 
                                             className={cn(
                                                 "group relative flex flex-col p-5 rounded-3xl transition-all duration-300 cursor-pointer overflow-hidden ring-1 ring-transparent",
@@ -1062,9 +1147,10 @@ export const App: React.FC = () => {
                                                 "bg-white/60 dark:bg-slate-900/40 backdrop-blur-md border border-white/50 dark:border-white/5 shadow-sm dark:shadow-sm",
                                                 clickedLinkId === link.id 
                                                     ? "animate-pop bg-cyan-500/10 border-cyan-500/30 ring-cyan-500/30" 
-                                                    : "hover:shadow-2xl hover:shadow-cyan-900/10 dark:hover:shadow-cyan-900/20 hover:scale-[1.02] hover:-translate-y-1 hover:ring-cyan-500/30 hover:border-cyan-500/30"
+                                                    : "hover:shadow-2xl hover:shadow-cyan-900/10 dark:hover:shadow-cyan-900/20 hover:scale-[1.02] hover:-translate-y-1 hover:ring-cyan-500/30 hover:border-cyan-500/30",
+                                                draggedItem?.catId === cat.id && draggedItem?.index === linkIndex && "opacity-40 border-dashed border-cyan-500 scale-95"
                                             )} 
-                                            style={{ opacity: settings.cardOpacity / 100 }}
+                                            style={{ opacity: (draggedItem?.catId === cat.id && draggedItem?.index === linkIndex) ? 0.4 : settings.cardOpacity / 100 }}
                                           >
                                               <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/10 to-purple-500/10 dark:from-cyan-500/20 dark:to-purple-500/20 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"/>
                                               
