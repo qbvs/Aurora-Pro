@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Settings, Plus, Search, Moon, Sun, LayoutGrid, 
   LogOut, Edit, Trash2, X, Wand2, AlertCircle, 
@@ -111,6 +111,7 @@ export const App: React.FC = () => {
   const [clickedLinkId, setClickedLinkId] = useState<string | null>(null); // For click animation
   const [isDark, setIsDark] = useState(true); // Internal state for easier rendering logic
   const [draggedItem, setDraggedItem] = useState<{ catId: string; index: number } | null>(null); // Dragging State
+  const [isHeaderVisible, setIsHeaderVisible] = useState(true); // Header visibility state
 
   // -- Inputs --
   const [searchTerm, setSearchTerm] = useState('');
@@ -151,6 +152,9 @@ export const App: React.FC = () => {
   const [editingAiConfig, setEditingAiConfig] = useState<AIProviderConfig | null>(null);
   const [aiKeySource, setAiKeySource] = useState<'manual' | 'env'>('manual');
   const [testStatus, setTestStatus] = useState<{ status: 'idle' | 'loading' | 'success' | 'fail', message?: string }>({ status: 'idle' });
+  
+  // Refs
+  const scrollTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   
   // --- Logic ---
   const addToast = (type: 'success' | 'error' | 'info', msg: string) => {
@@ -331,6 +335,14 @@ export const App: React.FC = () => {
           }
       });
   }, [settings.enableAiGreeting]);
+
+  const handleContentScroll = () => {
+      setIsHeaderVisible(false);
+      if (scrollTimeout.current) clearTimeout(scrollTimeout.current);
+      scrollTimeout.current = setTimeout(() => {
+          setIsHeaderVisible(true);
+      }, 500); // Show header 500ms after scroll stops
+  };
 
   // --- Drag & Drop Handlers ---
   const handleDragStart = (e: React.DragEvent, catId: string, index: number) => {
@@ -1079,7 +1091,12 @@ export const App: React.FC = () => {
                   <div className="shrink-0 z-20 px-2"> 
                       {/* We need some bottom margin/padding here so it doesn't look cramped against the scroll area */}
                       {settings.enableAiGreeting && !viewCategory && (
-                          <div className="mb-0"> 
+                          <div className={cn(
+                              "transition-all duration-500 ease-in-out overflow-hidden transform",
+                              isHeaderVisible 
+                                  ? "max-h-[500px] opacity-100 translate-y-0 mb-0" 
+                                  : "max-h-0 opacity-0 -translate-y-8 mb-0"
+                          )}> 
                               <AiCommandPanel 
                                   initialGreeting={aiGreeting}
                                   onRefreshGreeting={handleAiRefreshGreeting}
@@ -1100,7 +1117,10 @@ export const App: React.FC = () => {
                   </div>
 
                   {/* Scrollable Content Section */}
-                  <div className="flex-1 overflow-y-auto custom-scrollbar px-2 pb-20 scroll-smooth">
+                  <div 
+                    className="flex-1 overflow-y-auto custom-scrollbar px-2 pb-20 scroll-smooth"
+                    onScroll={handleContentScroll}
+                  >
                       <div className="space-y-10 pb-10">
                           {visibleCategories.map(cat => {
                               const isFocusMode = !!viewCategory;
