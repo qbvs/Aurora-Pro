@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { 
   Settings, Plus, Search, Moon, Sun, LayoutGrid, 
@@ -5,7 +6,8 @@ import {
   Image as ImageIcon, Upload, Palette, Type as TypeIcon, Lock,
   Activity, CircleCheck, Bot, Key, Server, TriangleAlert, ChevronDown, ChevronRight,
   ChevronUp, Link as LinkIcon, Power, QrCode, Sparkles, ScanLine, Menu, Terminal, Monitor,
-  Home, ArrowLeft, Clock, Compass, Calendar, Cloud, CloudFog, CloudDrizzle, CloudRain, CloudHail, CloudSnow, CloudRainWind, CloudLightning, Thermometer
+  Home, ArrowLeft, Clock, Compass, Calendar, Cloud, CloudFog, CloudDrizzle, CloudRain, CloudHail, CloudSnow, CloudRainWind, CloudLightning, Thermometer,
+  ShieldCheck, ShieldAlert
 } from 'lucide-react';
 import { 
   Category, LinkItem, AppSettings, SearchEngine, 
@@ -661,6 +663,18 @@ export const App: React.FC = () => {
                   <div><label className="block text-sm font-bold text-slate-400 mb-2">应用名称</label><input value={settings.appName} onChange={(e) => { const n = {...settings, appName: e.target.value}; setLocalSettings(n); saveSettings(n); }} className="w-full p-3 rounded-xl bg-slate-950 border border-slate-800 outline-none focus:border-cyan-500 transition-colors text-slate-200"/></div>
                   <div><label className="block text-sm font-bold text-slate-400 mb-2">Logo 模式</label><div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800">{(['icon', 'image'] as const).map(m => (<button key={m} onClick={() => { const n = {...settings, logoMode: m}; setLocalSettings(n); saveSettings(n); }} className={cn("flex-1 py-2 rounded-lg text-sm font-bold transition-all", settings.logoMode === m ? "bg-slate-800 shadow-sm text-cyan-400" : "text-slate-500 hover:text-slate-300")}>{m === 'icon' ? '图标' : '图片'}</button>))}</div></div>
                   {settings.logoMode === 'icon' ? (<div><label className="block text-sm font-bold text-slate-400 mb-2">图标名称 (Lucide React)</label><div className="flex gap-2"><div className="w-12 h-12 rounded-xl bg-cyan-900/20 text-cyan-400 flex items-center justify-center shrink-0 border border-cyan-500/20"><Icon name={settings.appIcon} size={24}/></div><div className="flex-1 flex gap-2"><input value={settings.appIcon} onChange={(e) => { const n = {...settings, appIcon: e.target.value}; setLocalSettings(n); saveSettings(n); }} className="flex-1 p-3 rounded-xl bg-slate-950 border border-slate-800 outline-none focus:border-cyan-500 transition-colors font-mono text-slate-200"/><button onClick={handleAiSuggestIcon} disabled={isIconSuggesting} className="px-4 bg-cyan-900/30 text-cyan-400 border border-cyan-500/20 rounded-xl font-bold hover:bg-cyan-900/50 transition-colors flex items-center gap-2 text-xs">{isIconSuggesting ? <LoadingSpinner/> : <Sparkles size={16}/>} 智能推荐</button></div></div></div>) : (<div><label className="block text-sm font-bold text-slate-400 mb-2">上传 Logo</label><div className="flex items-center gap-2">{settings.customLogoUrl && <img src={settings.customLogoUrl} className="w-12 h-12 rounded-xl object-contain bg-slate-950"/>}<input placeholder="https://..." value={settings.customLogoUrl || ''} onChange={(e) => { const n = {...settings, customLogoUrl: e.target.value}; setLocalSettings(n); saveSettings(n); }} className="flex-1 p-2.5 rounded-xl bg-slate-950 border border-slate-800 outline-none text-sm text-slate-200"/><label className="cursor-pointer px-4 py-2.5 bg-slate-800 hover:bg-slate-700 rounded-xl text-sm font-bold flex items-center gap-2 shrink-0 text-slate-300"><Upload size={16}/> 上传<input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, 'logo')}/></label></div></div>)}
+                  
+                  {/* Password Status Check - New Feature */}
+                  <div>
+                    <label className="block text-sm font-bold text-slate-400 mb-2">管理员密码状态</label>
+                    <div className={cn("p-3 rounded-xl border flex items-center gap-3", process.env.ADMIN_PASSWORD ? "bg-emerald-950/20 border-emerald-500/20 text-emerald-400" : "bg-red-950/20 border-red-500/20 text-red-400")}>
+                        {process.env.ADMIN_PASSWORD ? <ShieldCheck size={20} /> : <ShieldAlert size={20} />}
+                        <span className="text-sm font-medium">
+                            {process.env.ADMIN_PASSWORD ? "已配置 (安全)" : "未检测到 (危险) - 请在部署平台配置环境变量并重新部署"}
+                        </span>
+                    </div>
+                  </div>
+
               </div>
           </section>
       </div>

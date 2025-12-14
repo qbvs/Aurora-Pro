@@ -9,7 +9,6 @@ import { getSettingsLocal } from "./storageService";
 // Updated helper to support CUSTOM_API_KEY_X format directly
 const getEnvValue = (key?: string): string => {
     if (!key) return '';
-    // Fix: Removed dynamic process.env[key] access which causes ReferenceError in browser
     
     // Explicitly check known keys that Vite defines
     switch (key) {
@@ -23,9 +22,6 @@ const getEnvValue = (key?: string): string => {
     }
 };
 
-// Fix: Updated API key resolution to strictly follow @google/genai guidelines.
-// For Google services, it now exclusively uses `process.env.API_KEY`.
-// Manual input and other env slots are only for other provider types (e.g., 'openai').
 const resolveApiKey = (config: AIProviderConfig): string => {
     if (config.type === 'google') {
         return process.env.API_KEY || '';
@@ -70,13 +66,19 @@ const constructOpenAiEndpoint = (baseUrl: string): string => {
     if (!baseUrl) return '';
     let url = baseUrl.trim().replace(/\/$/, '');
     
-    // Some providers like Aliyun need strict path adherence, others need /chat/completions
-    // If user provided a full path including v1, respect it mostly.
-    // Simple heuristic: if it doesn't end in chat/completions, append it.
-    if (!url.endsWith('/chat/completions')) {
+    // 1. If user explicitly included /chat/completions, trust them.
+    if (url.endsWith('/chat/completions')) {
+        return url;
+    }
+
+    // 2. If user provided a path ending in /v1, just append the endpoint
+    if (url.endsWith('/v1')) {
         return `${url}/chat/completions`;
     }
-    return url;
+
+    // 3. Smart Default: If it looks like a raw domain (common mistake), add /v1/chat/completions
+    // Most providers (Mistral, DeepSeek, SiliconFlow) adhere to the /v1 standard.
+    return `${url}/v1/chat/completions`;
 };
 
 const cleanJsonString = (text: string): string => {
