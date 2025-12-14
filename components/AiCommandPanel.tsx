@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { 
   Sparkles, MessageCircleQuestion, Compass, Send, 
@@ -133,7 +134,9 @@ export const AiCommandPanel: React.FC<AiCommandPanelProps> = ({
         // Styles moved from inner div to outer container to ensure correct clipping
         "rounded-3xl shadow-lg border border-white/50 dark:border-white/10",
         "bg-white/60 dark:bg-slate-900/40 backdrop-blur-md",
-        mode === 'greeting' ? "h-48 cursor-default" : "h-auto min-h-[192px]"
+        // FIX: Ensure both greeting and input modes share the same fixed height (h-48) to prevent jumping.
+        // Only expand to auto height when showing results.
+        mode === 'result' ? "h-auto min-h-[192px]" : "h-48"
       )}
       onMouseEnter={() => {
         // Only switch to input mode if we are in greeting mode and not loading
@@ -147,7 +150,8 @@ export const AiCommandPanel: React.FC<AiCommandPanelProps> = ({
       <div className="absolute inset-0 rounded-3xl bg-gradient-to-r from-cyan-500/10 to-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-1000 pointer-events-none"/>
       {mode === 'result' && <div className="absolute inset-0 rounded-3xl bg-white/50 dark:bg-slate-950/50 transition-colors duration-500"/>}
 
-      <div className="relative z-10 w-full h-full flex flex-col justify-center items-center p-6 md:p-10">
+      {/* Adjust padding: use px instead of p to avoid vertical padding blowing out the fixed height in input mode */}
+      <div className="relative z-10 w-full h-full flex flex-col justify-center items-center px-6 md:px-10 py-6">
         
         {/* --- 1. GREETING MODE --- */}
         <div 

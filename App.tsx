@@ -1074,117 +1074,126 @@ export const App: React.FC = () => {
                   </div>
               </aside>
 
-              <main className="flex-1 min-w-0 overflow-y-auto custom-scrollbar pb-20 scroll-smooth h-[calc(100vh-120px)] px-2">
-                  {settings.enableAiGreeting && !viewCategory && (
-                      <AiCommandPanel 
-                          initialGreeting={aiGreeting}
-                          onRefreshGreeting={handleAiRefreshGreeting}
-                          onAskQuestion={askSimpleQuestion}
-                          onDiscoverSites={handleAiDiscovery}
-                          onAddLink={handleAddDiscoveryLink}
-                      />
-                  )}
-                  
-                  {viewCategory && (
-                      <div className="mb-8 animate-fade-in">
-                          <button onClick={() => setViewCategory(null)} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/50 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-sm font-bold text-slate-600 dark:text-slate-300 hover:bg-white/80 dark:hover:bg-white/10 hover:border-cyan-500/30 hover:text-cyan-600 dark:hover:text-white transition-all group">
-                              <ArrowLeft size={16} className="group-hover:-translate-x-1 transition-transform"/> 返回总览
-                          </button>
-                      </div>
-                  )}
+              <main className="flex-1 min-w-0 flex flex-col h-[calc(100vh-120px)]">
+                  {/* Fixed Header Section (AI Panel or Back Button) */}
+                  <div className="shrink-0 z-20 px-2"> 
+                      {/* We need some bottom margin/padding here so it doesn't look cramped against the scroll area */}
+                      {settings.enableAiGreeting && !viewCategory && (
+                          <div className="mb-0"> 
+                              <AiCommandPanel 
+                                  initialGreeting={aiGreeting}
+                                  onRefreshGreeting={handleAiRefreshGreeting}
+                                  onAskQuestion={askSimpleQuestion}
+                                  onDiscoverSites={handleAiDiscovery}
+                                  onAddLink={handleAddDiscoveryLink}
+                              />
+                          </div>
+                      )}
+                      
+                      {viewCategory && (
+                          <div className="mb-8 animate-fade-in">
+                              <button onClick={() => setViewCategory(null)} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/50 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-sm font-bold text-slate-600 dark:text-slate-300 hover:bg-white/80 dark:hover:bg-white/10 hover:border-cyan-500/30 hover:text-cyan-600 dark:hover:text-white transition-all group">
+                                  <ArrowLeft size={16} className="group-hover:-translate-x-1 transition-transform"/> 返回总览
+                              </button>
+                          </div>
+                      )}
+                  </div>
 
-                  <div className="space-y-10 pb-10">
-                      {visibleCategories.map(cat => {
-                          const isFocusMode = !!viewCategory;
-                          const isCommon = cat.id === COMMON_REC_ID;
-                          const showAllLinks = isFocusMode || isCommon;
-                          const displayLinks = showAllLinks ? cat.links : cat.links.slice(0, 2);
-                          const hasMore = !showAllLinks && cat.links.length > 2;
+                  {/* Scrollable Content Section */}
+                  <div className="flex-1 overflow-y-auto custom-scrollbar px-2 pb-20 scroll-smooth">
+                      <div className="space-y-10 pb-10">
+                          {visibleCategories.map(cat => {
+                              const isFocusMode = !!viewCategory;
+                              const isCommon = cat.id === COMMON_REC_ID;
+                              const showAllLinks = isFocusMode || isCommon;
+                              const displayLinks = showAllLinks ? cat.links : cat.links.slice(0, 2);
+                              const hasMore = !showAllLinks && cat.links.length > 2;
 
-                          return (
-                              <section key={cat.id} id={cat.id} className="scroll-mt-36 animate-fade-in-up">
-                                  <div className="flex items-center gap-4 mb-6 group cursor-pointer" onClick={() => !isCommon && !viewCategory && setViewCategory(cat.id)}>
-                                      <div className={cn("p-2.5 rounded-xl transition-all duration-300 border border-transparent", 
-                                          isCommon 
-                                            ? "bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20" 
-                                            : "bg-white/50 dark:bg-white/5 text-slate-500 dark:text-slate-400 group-hover:bg-cyan-500 group-hover:text-white group-hover:shadow-[0_0_15px_rgba(34,211,238,0.4)]"
-                                      )}>
-                                          <Icon name={cat.icon} size={22}/>
+                              return (
+                                  <section key={cat.id} id={cat.id} className="scroll-mt-36 animate-fade-in-up">
+                                      <div className="flex items-center gap-4 mb-6 group cursor-pointer" onClick={() => !isCommon && !viewCategory && setViewCategory(cat.id)}>
+                                          <div className={cn("p-2.5 rounded-xl transition-all duration-300 border border-transparent", 
+                                              isCommon 
+                                                ? "bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20" 
+                                                : "bg-white/50 dark:bg-white/5 text-slate-500 dark:text-slate-400 group-hover:bg-cyan-500 group-hover:text-white group-hover:shadow-[0_0_15px_rgba(34,211,238,0.4)]"
+                                          )}>
+                                              <Icon name={cat.icon} size={22}/>
+                                          </div>
+                                          <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">{cat.title}</h2>
+                                          {!isCommon && !viewCategory && (
+                                              <div className="opacity-0 group-hover:opacity-100 transition-opacity transform translate-x-[-10px] group-hover:translate-x-0 duration-300 text-cyan-600 dark:text-cyan-400">
+                                                  <ChevronRight size={18}/>
+                                              </div>
+                                          )}
                                       </div>
-                                      <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">{cat.title}</h2>
-                                      {!isCommon && !viewCategory && (
-                                          <div className="opacity-0 group-hover:opacity-100 transition-opacity transform translate-x-[-10px] group-hover:translate-x-0 duration-300 text-cyan-600 dark:text-cyan-400">
-                                              <ChevronRight size={18}/>
-                                          </div>
-                                      )}
-                                  </div>
-                                  
-                                  <div 
-                                      className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5"
-                                      onDragOver={handleDragOver}
-                                      onDrop={(e) => {
-                                          e.preventDefault();
-                                          if (!isCommon && draggedItem && draggedItem.catId) {
-                                              // If dropped on empty space in grid, append to end
-                                              handleDrop(e, cat.id, cat.links.length);
-                                          }
-                                      }}
-                                  >
-                                      {displayLinks.map((link, linkIndex) => (
-                                          <div 
-                                            key={link.id} 
-                                            draggable={!isCommon}
-                                            onDragStart={(e) => handleDragStart(e, cat.id, linkIndex)}
-                                            onDragOver={handleDragOver}
-                                            onDrop={(e) => {
-                                                e.stopPropagation();
-                                                handleDrop(e, cat.id, linkIndex);
-                                            }}
-                                            onClick={() => handleLinkClick(cat, link)} 
-                                            className={cn(
-                                                "group relative flex flex-col p-5 rounded-3xl transition-all duration-300 cursor-pointer overflow-hidden ring-1 ring-transparent",
-                                                // Updated Card Styles for Light/Dark
-                                                "bg-white/60 dark:bg-slate-900/40 backdrop-blur-md border border-white/50 dark:border-white/5 shadow-sm dark:shadow-sm",
-                                                clickedLinkId === link.id 
-                                                    ? "animate-pop bg-cyan-500/10 border-cyan-500/30 ring-cyan-500/30" 
-                                                    : "hover:shadow-2xl hover:shadow-cyan-900/10 dark:hover:shadow-cyan-900/20 hover:scale-[1.02] hover:-translate-y-1 hover:ring-cyan-500/30 hover:border-cyan-500/30",
-                                                draggedItem?.catId === cat.id && draggedItem?.index === linkIndex && "opacity-40 border-dashed border-cyan-500 scale-95"
-                                            )} 
-                                            style={{ opacity: (draggedItem?.catId === cat.id && draggedItem?.index === linkIndex) ? 0.4 : settings.cardOpacity / 100 }}
-                                          >
-                                              <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/10 to-purple-500/10 dark:from-cyan-500/20 dark:to-purple-500/20 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"/>
-                                              
-                                              <div className="flex items-start justify-between mb-4 relative z-10">
-                                                  <div className="p-1.5 bg-white/80 dark:bg-slate-800/80 rounded-2xl shadow-inner group-hover:shadow-cyan-500/20 transition-all border border-slate-100 dark:border-white/5">
-                                                      <Favicon url={link.url} size={32} className="rounded-xl"/>
+                                      
+                                      <div 
+                                          className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5"
+                                          onDragOver={handleDragOver}
+                                          onDrop={(e) => {
+                                              e.preventDefault();
+                                              if (!isCommon && draggedItem && draggedItem.catId) {
+                                                  // If dropped on empty space in grid, append to end
+                                                  handleDrop(e, cat.id, cat.links.length);
+                                              }
+                                          }}
+                                      >
+                                          {displayLinks.map((link, linkIndex) => (
+                                              <div 
+                                                key={link.id} 
+                                                draggable={!isCommon}
+                                                onDragStart={(e) => handleDragStart(e, cat.id, linkIndex)}
+                                                onDragOver={handleDragOver}
+                                                onDrop={(e) => {
+                                                    e.stopPropagation();
+                                                    handleDrop(e, cat.id, linkIndex);
+                                                }}
+                                                onClick={() => handleLinkClick(cat, link)} 
+                                                className={cn(
+                                                    "group relative flex flex-col p-5 rounded-3xl transition-all duration-300 cursor-pointer overflow-hidden ring-1 ring-transparent",
+                                                    // Updated Card Styles for Light/Dark
+                                                    "bg-white/60 dark:bg-slate-900/40 backdrop-blur-md border border-white/50 dark:border-white/5 shadow-sm dark:shadow-sm",
+                                                    clickedLinkId === link.id 
+                                                        ? "animate-pop bg-cyan-500/10 border-cyan-500/30 ring-cyan-500/30" 
+                                                        : "hover:shadow-2xl hover:shadow-cyan-900/10 dark:hover:shadow-cyan-900/20 hover:scale-[1.02] hover:-translate-y-1 hover:ring-cyan-500/30 hover:border-cyan-500/30",
+                                                    draggedItem?.catId === cat.id && draggedItem?.index === linkIndex && "opacity-40 border-dashed border-cyan-500 scale-95"
+                                                )} 
+                                                style={{ opacity: (draggedItem?.catId === cat.id && draggedItem?.index === linkIndex) ? 0.4 : settings.cardOpacity / 100 }}
+                                              >
+                                                  <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/10 to-purple-500/10 dark:from-cyan-500/20 dark:to-purple-500/20 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"/>
+                                                  
+                                                  <div className="flex items-start justify-between mb-4 relative z-10">
+                                                      <div className="p-1.5 bg-white/80 dark:bg-slate-800/80 rounded-2xl shadow-inner group-hover:shadow-cyan-500/20 transition-all border border-slate-100 dark:border-white/5">
+                                                          <Favicon url={link.url} size={32} className="rounded-xl"/>
+                                                      </div>
+                                                      <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-white/5 group-hover:bg-cyan-500/20 flex items-center justify-center text-slate-400 dark:text-slate-500 group-hover:text-cyan-600 dark:group-hover:text-cyan-300 transition-all duration-300 scale-90 group-hover:scale-100">
+                                                          <ArrowLeft size={16} className="rotate-135"/>
+                                                      </div>
                                                   </div>
-                                                  <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-white/5 group-hover:bg-cyan-500/20 flex items-center justify-center text-slate-400 dark:text-slate-500 group-hover:text-cyan-600 dark:group-hover:text-cyan-300 transition-all duration-300 scale-90 group-hover:scale-100">
-                                                      <ArrowLeft size={16} className="rotate-135"/>
-                                                  </div>
+                                                  <h3 className="font-bold text-slate-800 dark:text-slate-200 text-[15px] truncate mb-1 relative z-10 group-hover:text-cyan-600 dark:group-hover:text-cyan-300 transition-colors">{link.title}</h3>
+                                                  <p className="text-xs text-slate-500 dark:text-slate-500 group-hover:text-slate-600 dark:group-hover:text-slate-400 line-clamp-2 leading-relaxed relative z-10 transition-colors">{link.description}</p>
+                                                  
+                                                  {(link.pros || link.cons) && (
+                                                      <div className="mt-4 flex gap-2 opacity-60 group-hover:opacity-100 transition-opacity relative z-10">
+                                                          {link.pros && <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shadow-[0_0_8px_rgba(16,185,129,0.1)]">{link.pros}</span>}
+                                                          {link.cons && <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700">{link.cons}</span>}
+                                                      </div>
+                                                  )}
                                               </div>
-                                              <h3 className="font-bold text-slate-800 dark:text-slate-200 text-[15px] truncate mb-1 relative z-10 group-hover:text-cyan-600 dark:group-hover:text-cyan-300 transition-colors">{link.title}</h3>
-                                              <p className="text-xs text-slate-500 dark:text-slate-500 group-hover:text-slate-600 dark:group-hover:text-slate-400 line-clamp-2 leading-relaxed relative z-10 transition-colors">{link.description}</p>
-                                              
-                                              {(link.pros || link.cons) && (
-                                                  <div className="mt-4 flex gap-2 opacity-60 group-hover:opacity-100 transition-opacity relative z-10">
-                                                      {link.pros && <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shadow-[0_0_8px_rgba(16,185,129,0.1)]">{link.pros}</span>}
-                                                      {link.cons && <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700">{link.cons}</span>}
+                                          ))}
+                                          {hasMore && (
+                                              <button onClick={() => setViewCategory(cat.id)} className="flex flex-col items-center justify-center gap-3 p-5 rounded-3xl border border-dashed border-slate-300 dark:border-white/10 bg-white/30 dark:bg-white/[0.02] text-slate-400 dark:text-slate-500 hover:border-cyan-500/30 hover:text-cyan-600 dark:hover:text-cyan-400 hover:bg-cyan-500/5 transition-all group backdrop-blur-sm min-h-[140px]">
+                                                  <div className="w-12 h-12 rounded-full bg-white/50 dark:bg-white/5 group-hover:bg-cyan-500/10 shadow-sm flex items-center justify-center transition-all group-hover:scale-110 duration-300">
+                                                      <ChevronRight size={24}/>
                                                   </div>
-                                              )}
-                                          </div>
-                                      ))}
-                                      {hasMore && (
-                                          <button onClick={() => setViewCategory(cat.id)} className="flex flex-col items-center justify-center gap-3 p-5 rounded-3xl border border-dashed border-slate-300 dark:border-white/10 bg-white/30 dark:bg-white/[0.02] text-slate-400 dark:text-slate-500 hover:border-cyan-500/30 hover:text-cyan-600 dark:hover:text-cyan-400 hover:bg-cyan-500/5 transition-all group backdrop-blur-sm min-h-[140px]">
-                                              <div className="w-12 h-12 rounded-full bg-white/50 dark:bg-white/5 group-hover:bg-cyan-500/10 shadow-sm flex items-center justify-center transition-all group-hover:scale-110 duration-300">
-                                                  <ChevronRight size={24}/>
-                                              </div>
-                                              <span className="text-xs font-bold tracking-wide">查看全部 ({cat.links.length})</span>
-                                          </button>
-                                      )}
-                                  </div>
-                              </section>
-                          );
-                      })}
+                                                  <span className="text-xs font-bold tracking-wide">查看全部 ({cat.links.length})</span>
+                                              </button>
+                                          )}
+                                      </div>
+                                  </section>
+                              );
+                          })}
+                      </div>
                   </div>
               </main>
           </div>
